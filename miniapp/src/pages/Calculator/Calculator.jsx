@@ -580,7 +580,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [searchHasMore, setSearchHasMore] = useState(false)
   const [searchNextStartId, setSearchNextStartId] = useState(0)
   const [searchUnavailablePlatform, setSearchUnavailablePlatform] = useState('')
-  const [showcaseProducts, setShowcaseProducts] = useState(() => buildCuratedShowcaseProducts())
+  const [showcaseProducts, setShowcaseProducts] = useState([])
   const [isAdminViewer, setIsAdminViewer] = useState(false)
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false)
   const [showcaseEditorLoading, setShowcaseEditorLoading] = useState(false)
@@ -747,29 +747,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       return
     }
 
-    if (CALC_CURATED_SHOWCASE_PRODUCTS.length) {
-      setShowcaseProducts(buildCuratedShowcaseProducts())
-      return
-    }
-
-    if (!userId) {
-      setShowcaseProducts([])
-      return
-    }
-
-    try {
-      const response = await fetch(`/api/history?user_id=${userId}`)
-      const data = repairMojibakeDeep(await response.json())
-
-      if (data?.error) {
-        throw new Error(data.error)
-      }
-
-      setShowcaseProducts(buildHistoryShowcaseProducts(Array.isArray(data) ? data : []))
-    } catch {
-      setShowcaseProducts([])
-    }
-  }, [userId])
+    setShowcaseProducts([])
+  }, [])
 
   const refreshBootstrap = useCallback(async () => {
     try {
