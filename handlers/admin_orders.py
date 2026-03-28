@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
 
 import database as db
+from auth import is_admin
 from config import ADMIN_USER_ID, ADMIN_USERNAME
 from services.market_compare import extract_search_query
 
@@ -280,7 +281,7 @@ async def handle_admin_orders_callback(update: Update, ctx: ContextTypes.DEFAULT
     data = query.data
     user_id = query.from_user.id
 
-    if not ADMIN_USER_ID or user_id != ADMIN_USER_ID:
+    if not is_admin(user_id):
         return
 
     # ── Открыть заявки (из стартового меню) — не трогаем текущее сообщение ──────
@@ -1124,7 +1125,7 @@ async def handle_admin_carts_callback(update: Update, ctx: ContextTypes.DEFAULT_
     data = query.data
     user_id = query.from_user.id
 
-    if not ADMIN_USER_ID or user_id != ADMIN_USER_ID:
+    if not is_admin(user_id):
         return
 
     # ── Открыть список корзин (из стартового фото-меню) ──────────────────────

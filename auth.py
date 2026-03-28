@@ -5,7 +5,7 @@ import hmac
 import json
 from urllib.parse import parse_qsl
 
-from config import ADMIN_USER_ID, BOT_TOKEN
+from config import ADMIN_USER_IDS, BOT_TOKEN
 
 
 def validate_init_data(init_data_raw: str, bot_token: str | None = None) -> dict:
@@ -59,5 +59,5 @@ def get_user_id_from_init_data(init_data_raw: str, bot_token: str | None = None)
 
 
 def is_admin(user_id: int) -> bool:
-    """Check if user_id matches ADMIN_USER_ID."""
-    return user_id != 0 and user_id == ADMIN_USER_ID
+    """Check if user_id is present in the configured admin allowlist."""
+    return user_id != 0 and user_id in ADMIN_USER_IDS

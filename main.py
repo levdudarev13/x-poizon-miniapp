@@ -74,18 +74,18 @@ def main():
     from handlers.admin_orders import build_admin_orders_handlers, build_admin_carts_handlers, handle_admin_notify_text
     from handlers.messages import build_messages_conv_handler, build_messages_handlers
     from handlers.mode import build_mode_handlers
-    from config import ADMIN_USER_ID as _ADMIN_ID
+    from config import ADMIN_USER_IDS as _ADMIN_IDS
 
     # Команды (start, help) — регистрируем первыми
     for h in build_command_handlers():
         app.add_handler(h, group=0)
 
     # Ввод номеров товаров для уведомлений (admin) — group=0, до cart MessageHandler
-    if _ADMIN_ID:
+    if _ADMIN_IDS:
         from telegram.ext import MessageHandler, filters
         app.add_handler(
             MessageHandler(
-                filters.TEXT & ~filters.COMMAND & filters.User(_ADMIN_ID),
+                filters.TEXT & ~filters.COMMAND & filters.User(user_id=list(_ADMIN_IDS)),
                 handle_admin_notify_text,
             ),
             group=0,

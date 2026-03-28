@@ -73,7 +73,17 @@ RAPIDAPI_QUOTA_PERIODS: dict[str, str] = {
 }
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 ADMIN_USER_ID: int = int(os.getenv("ADMIN_USER_ID", "0"))
+ADMIN_USER_IDS: tuple[int, ...] = tuple(
+    user_id
+    for user_id in (
+        int(value)
+        for value in _parse_env_list("ADMIN_USER_IDS", "ADMIN_USER_ID")
+    )
+    if user_id > 0
+)
+ADMIN_CONTACT_USER_ID: int = int(os.getenv("ADMIN_CONTACT_USER_ID", "0"))
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+ADMIN_CONTACT_USERNAME: str = os.getenv("ADMIN_CONTACT_USERNAME", "")
 ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "")
 PROXY: str = os.getenv("PROXY", "")
 OZON_PROXY: str = os.getenv("OZON_PROXY", "")

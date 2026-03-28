@@ -123,6 +123,15 @@ class BootstrapIdentityTests(unittest.TestCase):
             "miniapp_server.ADMIN_USER_ID",
             777001,
         ), patch(
+            "miniapp_server.ADMIN_USER_IDS",
+            (777001,),
+        ), patch(
+            "miniapp_server.ADMIN_CONTACT_USER_ID",
+            0,
+        ), patch(
+            "miniapp_server.ADMIN_CONTACT_USERNAME",
+            "",
+        ), patch(
             "miniapp_server._showcase_payload",
             new=AsyncMock(return_value={"items": [], "configured_count": 0}),
         ):
@@ -131,6 +140,104 @@ class BootstrapIdentityTests(unittest.TestCase):
         self.assertEqual(payload["admin_contact_url"], "https://t.me/china_bayer2")
         self.assertEqual(payload["admin_contact_username"], "china_bayer2")
         self.assertEqual(payload["admin_contact_user_id"], 777001)
+
+    def test_bootstrap_payload_prefers_explicit_admin_contact_user_id(self) -> None:
+        rate = SimpleNamespace(
+            cny_rub=11.1,
+            usd_rub=12.2,
+            eur_rub=13.3,
+            updated_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+            age_seconds=5,
+            age_human="5s",
+        )
+
+        with patch(
+            "miniapp_server.er.get_rate",
+            new=AsyncMock(return_value=rate),
+        ), patch(
+            "miniapp_server.db.get_admin_settings",
+            new=AsyncMock(return_value={"commission_pct": "10.0"}),
+        ), patch(
+            "miniapp_server.db.get_or_create_user",
+            new=AsyncMock(
+                return_value={
+                    "margin_steps": "[]",
+                    "margin_min_rub": "500.0",
+                }
+            ),
+        ), patch(
+            "miniapp_server.ADMIN_USERNAME",
+            "china_bayer2",
+        ), patch(
+            "miniapp_server.ADMIN_USER_ID",
+            777001,
+        ), patch(
+            "miniapp_server.ADMIN_USER_IDS",
+            (777001, 1012099394),
+        ), patch(
+            "miniapp_server.ADMIN_CONTACT_USER_ID",
+            1012099394,
+        ), patch(
+            "miniapp_server.ADMIN_CONTACT_USERNAME",
+            "",
+        ), patch(
+            "miniapp_server._showcase_payload",
+            new=AsyncMock(return_value={"items": [], "configured_count": 0}),
+        ):
+            payload = asyncio.run(_bootstrap_payload(321, is_admin_user=False))
+
+        self.assertEqual(payload["admin_contact_url"], "tg://user?id=1012099394")
+        self.assertEqual(payload["admin_contact_username"], "")
+        self.assertEqual(payload["admin_contact_user_id"], 1012099394)
+
+    def test_bootstrap_payload_prefers_explicit_admin_contact_username(self) -> None:
+        rate = SimpleNamespace(
+            cny_rub=11.1,
+            usd_rub=12.2,
+            eur_rub=13.3,
+            updated_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+            age_seconds=5,
+            age_human="5s",
+        )
+
+        with patch(
+            "miniapp_server.er.get_rate",
+            new=AsyncMock(return_value=rate),
+        ), patch(
+            "miniapp_server.db.get_admin_settings",
+            new=AsyncMock(return_value={"commission_pct": "10.0"}),
+        ), patch(
+            "miniapp_server.db.get_or_create_user",
+            new=AsyncMock(
+                return_value={
+                    "margin_steps": "[]",
+                    "margin_min_rub": "500.0",
+                }
+            ),
+        ), patch(
+            "miniapp_server.ADMIN_USERNAME",
+            "china_bayer2",
+        ), patch(
+            "miniapp_server.ADMIN_USER_ID",
+            777001,
+        ), patch(
+            "miniapp_server.ADMIN_USER_IDS",
+            (777001, 1012099394),
+        ), patch(
+            "miniapp_server.ADMIN_CONTACT_USER_ID",
+            1012099394,
+        ), patch(
+            "miniapp_server.ADMIN_CONTACT_USERNAME",
+            "sofa_onli",
+        ), patch(
+            "miniapp_server._showcase_payload",
+            new=AsyncMock(return_value={"items": [], "configured_count": 0}),
+        ):
+            payload = asyncio.run(_bootstrap_payload(321, is_admin_user=False))
+
+        self.assertEqual(payload["admin_contact_url"], "https://t.me/sofa_onli")
+        self.assertEqual(payload["admin_contact_username"], "sofa_onli")
+        self.assertEqual(payload["admin_contact_user_id"], 1012099394)
 
     def test_bootstrap_payload_uses_effective_rate_for_display(self) -> None:
         rate = SimpleNamespace(

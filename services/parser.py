@@ -73,6 +73,10 @@ def _has_taobao_core_fields(info: dict) -> bool:
     )
 
 
+def _has_taobao_specs(info: dict) -> bool:
+    return bool(info.get("specs"))
+
+
 def _has_1688_core_fields(info: dict) -> bool:
     return bool(info.get("price") and info.get("name"))
 
@@ -1225,7 +1229,7 @@ async def _parse_taobao(client: httpx.AsyncClient, url: str) -> dict:
     if item_id:
         primary_item = await fetch_taobao_data_item_detail(client, item_id)
         result = build_info_from_taobao_data_item(primary_item)
-        if _has_taobao_core_fields(result):
+        if _has_taobao_core_fields(result) and _has_taobao_specs(result):
             return result
 
     api_item = await fetch_taobao_1688_item_by_url(client, url)
@@ -1237,7 +1241,7 @@ async def _parse_taobao(client: httpx.AsyncClient, url: str) -> dict:
         result["item_id"] = result.get("item_id") or item_id
         if result.get("detail_url"):
             url = result["detail_url"]
-        if _has_taobao_core_fields(result):
+        if _has_taobao_core_fields(result) and _has_taobao_specs(result):
             return result
 
         tertiary_item = await fetch_taobao_tmall_full_info(client, item_id)

@@ -9,7 +9,8 @@ from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 
 import database as db
-from config import ADMIN_USER_ID, MINI_APP_URL
+from auth import is_admin as is_admin_user
+from config import MINI_APP_URL
 from services import exchange_rate as er
 from utils.formatters import fmt_result
 
@@ -20,10 +21,10 @@ START_IMAGE_PATH = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "
 
 def build_start_kb(user_id: int, ctx) -> InlineKeyboardMarkup:
     """Построить клавиатуру стартового сообщения с учетом режима."""
-    is_admin = bool(ADMIN_USER_ID and user_id == ADMIN_USER_ID)
-    buyer_mode = is_admin and ctx is not None and ctx.user_data.get("admin_buyer_mode", False)
+    admin_viewer = is_admin_user(user_id)
+    buyer_mode = admin_viewer and ctx is not None and ctx.user_data.get("admin_buyer_mode", False)
 
-    if is_admin and not buyer_mode:
+    if admin_viewer and not buyer_mode:
         rows = [
             [InlineKeyboardButton("📱 Открыть mini app", web_app=WebAppInfo(url=MINI_APP_URL))],
             [InlineKeyboardButton("📋 Заявки", callback_data="aord:open")],
@@ -81,9 +82,9 @@ HELP_TEXT = BUYER_TEXT
 
 def get_start_text(user_id: int, ctx) -> str:
     """Вернуть стартовый текст для пользователя или администратора."""
-    is_admin = bool(ADMIN_USER_ID and user_id == ADMIN_USER_ID)
-    buyer_mode = is_admin and ctx is not None and ctx.user_data.get("admin_buyer_mode", False)
-    return ADMIN_TEXT if (is_admin and not buyer_mode) else BUYER_TEXT
+    admin_viewer = is_admin_user(user_id)
+    buyer_mode = admin_viewer and ctx is not None and ctx.user_data.get("admin_buyer_mode", False)
+    return ADMIN_TEXT if (admin_viewer and not buyer_mode) else BUYER_TEXT
 
 
 async def send_start_photo(bot, chat_id: int, user, ctx) -> None:

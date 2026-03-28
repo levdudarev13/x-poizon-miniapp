@@ -126,11 +126,11 @@ def _format_timestamp_ms(value: Any) -> str | None:
         return None
     if numeric <= 0:
         return None
-    # API returns Unix time in milliseconds.
-    from datetime import datetime, UTC
+    # Python 3.10 does not expose datetime.UTC; use timezone.utc instead.
+    from datetime import datetime, timezone
 
     try:
-        dt = datetime.fromtimestamp(numeric / 1000, tz=UTC)
+        dt = datetime.fromtimestamp(numeric / 1000, tz=timezone.utc)
     except Exception:
         return None
     return dt.strftime("%Y-%m-%d")

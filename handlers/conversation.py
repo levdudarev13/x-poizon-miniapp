@@ -12,6 +12,7 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 
+from auth import is_admin
 from models import ProductDraft, UserSettings, CalculationResult, BreakdownLine
 import database as db
 from services.parser import parse_url, is_valid_url, extract_url, resolve_url, _variant_price_key_from_dict
@@ -214,7 +215,7 @@ async def start_calc(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
     if ctx.user_data.get("editing_pricing_field"):
         return ConversationHandler.END
     # Пропускаем если админ вводит номера товаров для уведомлений
-    if ctx.bot_data.get("admin_notify_mode") and update.effective_user.id == ADMIN_USER_ID:
+    if ctx.bot_data.get("admin_notify_mode") and is_admin(update.effective_user.id):
         return ConversationHandler.END
     import re as _re
     text = (update.message.text or "").strip()

@@ -24,7 +24,10 @@ active_requests_lock = threading.Lock()
 import database as db
 from auth import get_user_id_from_init_data, is_admin
 from config import (
+    ADMIN_CONTACT_USER_ID,
+    ADMIN_CONTACT_USERNAME,
     ADMIN_USER_ID,
+    ADMIN_USER_IDS,
     ADMIN_USERNAME,
     BOT_TOKEN,
     CATEGORIES,
@@ -567,23 +570,37 @@ def _result_to_payload(
     }
 
 
-def _admin_contact_url() -> str:
-    username = str(ADMIN_USERNAME or "").strip().lstrip("@")
-    if not username:
-        return ""
-    return f"https://t.me/{username}"
-
-
-def _admin_contact_username() -> str:
-    return str(ADMIN_USERNAME or "").strip().lstrip("@")
-
-
-def _admin_contact_user_id() -> int:
+def _admin_contact_target_user_id() -> int:
+    if ADMIN_CONTACT_USER_ID > 0:
+        return int(ADMIN_CONTACT_USER_ID)
+    if ADMIN_USER_IDS:
+        return int(ADMIN_USER_IDS[-1])
     try:
         user_id = int(ADMIN_USER_ID or 0)
     except (TypeError, ValueError):
         return 0
     return user_id if user_id > 0 else 0
+
+
+def _admin_contact_url() -> str:
+    username = _admin_contact_username()
+    if not username:
+        contact_user_id = _admin_contact_target_user_id()
+        return f"tg://user?id={contact_user_id}" if contact_user_id > 0 else ""
+    return f"https://t.me/{username}"
+
+
+def _admin_contact_username() -> str:
+    explicit_contact_username = str(ADMIN_CONTACT_USERNAME or "").strip().lstrip("@")
+    if explicit_contact_username:
+        return explicit_contact_username
+    if _admin_contact_target_user_id() != int(ADMIN_USER_ID or 0):
+        return ""
+    return str(ADMIN_USERNAME or "").strip().lstrip("@")
+
+
+def _admin_contact_user_id() -> int:
+    return _admin_contact_target_user_id()
 
 
 async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -> dict:
@@ -2324,7 +2341,13 @@ async def _search_products(payload: dict) -> dict:
     provider_cursor: int | None = None
 
     import httpx
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    from config import PROXY
+
+    client_kwargs: dict[str, object] = {"timeout": 20.0}
+    if PROXY:
+        client_kwargs["proxy"] = PROXY
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
         if platform == "poizon":
             from services.poizon_api import fetch_keyword_search
 

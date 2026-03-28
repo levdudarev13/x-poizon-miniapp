@@ -9,7 +9,7 @@ from telegram.constants import ParseMode
 import database as db
 from services import exchange_rate as er
 from utils.formatters import fmt_rate_info
-from config import ADMIN_USER_ID
+from auth import is_admin
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ FIELD_LABELS = {f[0]: f[1] for f in PRICING_FIELDS}
 
 
 def _is_admin(user_id: int) -> bool:
-    return ADMIN_USER_ID and user_id == ADMIN_USER_ID
+    return is_admin(user_id)
 
 
 # ─── /settings — курс + кнопка расценок для админа ───────────────────────────

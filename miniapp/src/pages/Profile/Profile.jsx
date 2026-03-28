@@ -67,19 +67,21 @@ function normalizeAdminSupport(value) {
   }
 
   const candidate = value && typeof value === 'object' ? value : {}
-  const username = String(candidate.username || DEFAULT_ADMIN_SUPPORT.username).trim().replace(/^@+/, '')
+  const rawUsername = typeof candidate.username === 'string' ? candidate.username : ''
+  const username = rawUsername.trim().replace(/^@+/, '')
   const rawUrl = String(candidate.url || '').trim()
+  const numericUserId = Number(candidate.userId || candidate.user_id || 0)
+  const resolvedUserId = Number.isFinite(numericUserId) && numericUserId > 0
+    ? numericUserId
+    : DEFAULT_ADMIN_SUPPORT.userId
   const normalizedUrl = rawUrl
     ? (/^(https?:\/\/|tg:\/\/)/i.test(rawUrl) ? rawUrl : `https://t.me/${rawUrl.replace(/^@+/, '')}`)
-    : `https://t.me/${username}`
-  const numericUserId = Number(candidate.userId || candidate.user_id || DEFAULT_ADMIN_SUPPORT.userId)
+    : (username ? `https://t.me/${username}` : (resolvedUserId > 0 ? `tg://user?id=${resolvedUserId}` : DEFAULT_ADMIN_SUPPORT.url))
 
   return {
     url: normalizedUrl,
     username,
-    userId: Number.isFinite(numericUserId) && numericUserId > 0
-      ? numericUserId
-      : DEFAULT_ADMIN_SUPPORT.userId,
+    userId: resolvedUserId,
   }
 }
 
@@ -87,7 +89,7 @@ function openAdminChat(support, { tg, haptic }) {
   const target = normalizeAdminSupport(support)
   const telegramUrl = target.username
     ? `https://t.me/${target.username}`
-    : (/^https?:\/\/t\.me\//i.test(target.url) ? target.url : '')
+    : (/^(https?:\/\/t\.me\/|tg:\/\/)/i.test(target.url) ? target.url : '')
   const userDeepLink = target.userId > 0 ? `tg://user?id=${target.userId}` : ''
 
   try {

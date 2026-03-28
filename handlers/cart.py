@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.constants import ParseMode
 
 import database as db
+from auth import is_admin
 from models import CalculationResult, BreakdownLine
 from services.market_compare import extract_search_query
 from services.calculator import get_effective_rate
@@ -55,8 +56,7 @@ _BAN_SPAM_THRESHOLD = 5  # кол-во удалений из заявки за �
 
 
 async def _check_ban(user_id: int, bot, chat_id: int) -> bool:
-    from config import ADMIN_USER_ID
-    if ADMIN_USER_ID and user_id == ADMIN_USER_ID:
+    if is_admin(user_id):
         return False
     """Проверить, забанен ли пользователь.
     Если да и прошёл час с последнего уведомления — отправить сообщение.
@@ -87,8 +87,7 @@ async def _check_ban(user_id: int, bot, chat_id: int) -> bool:
 
 
 async def _apply_ban_if_needed(user_id: int, bot, chat_id: int, removes_count: int):
-    from config import ADMIN_USER_ID
-    if ADMIN_USER_ID and user_id == ADMIN_USER_ID:
+    if is_admin(user_id):
         return
     """Если счётчик достиг порога — наложить следующий уровень бана."""
     if removes_count < _BAN_SPAM_THRESHOLD:
