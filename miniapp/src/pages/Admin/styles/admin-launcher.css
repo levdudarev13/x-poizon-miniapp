@@ -1,0 +1,57 @@
+.admin-launcher__hero {
+  display: grid;
+  gap: 14px;
+  margin-bottom: var(--space-md);
+  padding: calc(var(--space-lg) - 4px) 2px 4px;
+}
+
+.admin-launcher__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-launcher__status {
+  display: grid;
+  gap: 6px;
+  max-width: 40ch;
+}
+
+.admin-launcher__status-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.admin-launcher__status-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-launcher__status-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-launcher__status-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-shell__grid.admin-launcher__grid {
+  gap: var(--space-md);
+}

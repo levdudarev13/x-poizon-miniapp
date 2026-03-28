@@ -1,0 +1,16 @@
+.light-rays-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transform: translateZ(0);
+}
+
+.light-rays-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  opacity: 1;
+}

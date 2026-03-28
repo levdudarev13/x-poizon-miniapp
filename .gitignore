@@ -1,0 +1,25 @@
+.env
+.env.test
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.db
+*.log
+*.zip
+*.tar
+*.gz
+miniapp/node_modules/
+miniapp/dist/
+bore.exe
+Image.png
+dewu-chrome.png
+dewu-chromium.png
+headed-dewu-debug.png
+manual_localhostrun.out.log
+manual_localhostrun.err.log
+tmp_localhostrun.cmd
+tmp_segment.txt
+bg_test.txt
+detached_test.txt
+Снимок экрана *.png

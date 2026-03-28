@@ -1,0 +1,29 @@
+.admin-shell [data-shell-swipe-block='true'],
+.admin-modal[data-shell-swipe-block='true'] {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-launcher__hero,
+  .admin-card,
+  .admin-cart-user,
+  .admin-orders__item-card,
+  .admin-carts__entity-card,
+  .admin-orders__section,
+  .admin-carts__section,
+  .admin-carts__overview,
+  .admin-order-item__tracking,
+  .admin-delivery,
+  .admin-pricing__hero,
+  .admin-pricing__overview,
+  .admin-pricing__field-card,
+  .admin-modal,
+  .admin-modal__card,
+  .admin-notice {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transform: none !important;
+  }
+}

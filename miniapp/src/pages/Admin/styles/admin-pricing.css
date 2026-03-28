@@ -1,0 +1,118 @@
+.admin-pricing__hero {
+  margin-bottom: var(--space-md);
+}
+
+.admin-pricing__overview {
+  display: grid;
+  gap: 0;
+  margin-bottom: var(--space-md);
+}
+
+.admin-pricing__feedback {
+  display: grid;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.admin-pricing__feedback .admin-notice {
+  margin: 0;
+}
+
+.admin-pricing__field-list {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.admin-pricing__field-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(192, 132, 252, 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
+    var(--bg-card);
+}
+
+.admin-pricing__field-card .admin-setting__hint {
+  max-width: 50ch;
+}
+
+.admin-pricing__field-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.admin-pricing__field-head .admin-setting__preview {
+  justify-self: flex-end;
+  max-width: 100%;
+  text-align: right;
+}
+
+.admin-pricing__field-row {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-pricing__stat-card {
+  border-color: rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(circle at top right, rgba(192, 132, 252, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
+    var(--bg-card);
+}
+
+.admin-pricing__field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.admin-pricing__field-actions > * {
+  flex: 1 1 140px;
+}
+
+.admin-pricing__field-note {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.admin-pricing__dirty {
+  border-color: rgba(192, 132, 252, 0.24);
+  box-shadow:
+    0 0 0 1px rgba(192, 132, 252, 0.08) inset,
+    0 20px 40px -32px rgba(192, 132, 252, 0.55);
+}
+
+.admin-pricing__submit {
+  min-width: 132px;
+}
+
+@media (min-width: 640px) {
+  .admin-pricing__field-head .admin-setting__preview {
+    max-width: 46%;
+  }
+
+  .admin-pricing__field-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .admin-pricing__field-actions {
+    justify-content: flex-end;
+  }
+
+  .admin-pricing__field-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .admin-pricing__submit {
+    min-width: 148px;
+  }
+}

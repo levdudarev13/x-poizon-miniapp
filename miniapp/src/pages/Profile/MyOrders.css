@@ -1,0 +1,392 @@
+.myord-page {
+  padding-bottom: 0;
+}
+
+.myord-page .page-content {
+  padding-bottom: calc(var(--shell-page-bottom-padding) + var(--space-sm));
+}
+
+.myord-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: 20px var(--space-md) 16px;
+}
+
+.myord-header__back {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: rgba(0, 200, 200, 0.12);
+  border: 1px solid rgba(0, 200, 200, 0.2);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+}
+
+.myord-header__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.myord-header__title {
+  font-size: var(--type-display-size);
+  line-height: var(--type-line-display);
+  font-weight: var(--type-weight-semibold);
+  letter-spacing: -0.04em;
+}
+
+.myord-header__sub {
+  font-size: var(--type-body-size);
+  line-height: var(--type-line-body);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.myord-list {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 0;
+}
+
+.myord-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.myord-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.myord-card__header-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.myord-card__order-id {
+  font-size: var(--type-body-size);
+  line-height: var(--type-line-body);
+  font-weight: var(--type-weight-semibold);
+  color: var(--text-primary);
+}
+
+.myord-card__date {
+  font-size: var(--buyer-number-meta-size);
+  line-height: var(--buyer-number-meta-line);
+  font-weight: var(--buyer-number-meta-weight);
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.myord-card__total {
+  font-size: var(--buyer-number-total-size);
+  line-height: var(--buyer-number-total-line);
+  font-weight: var(--buyer-number-total-weight);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.myord-card__badge-row {
+  display: flex;
+  align-items: center;
+}
+
+.myord-card__badge {
+  color: var(--myord-status-color);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.myord-card__product {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.myord-card__thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  flex-shrink: 0;
+}
+
+.myord-card__product-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.myord-card__product-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.myord-card__product-platform {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--myord-platform-color);
+}
+
+.myord-card__product-name {
+  font-size: var(--type-body-size);
+  line-height: 1.35;
+  font-weight: var(--type-weight-semibold);
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.myord-card__product-desc {
+  font-size: var(--type-label-size);
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.54);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.myord-card__product-price {
+  font-size: var(--buyer-number-price-size);
+  line-height: var(--buyer-number-price-line);
+  font-weight: var(--buyer-number-price-weight);
+  color: var(--accent);
+}
+
+.myord-card__tracker {
+  display: grid;
+  gap: 12px;
+  padding: 14px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.myord-card__tracker-msg {
+  font-size: var(--type-label-size);
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.myord-tracker {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.myord-tracker__step {
+  position: relative;
+  flex: 1;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.myord-tracker__dot {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 14, 18, 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--myord-status-color);
+  transition: transform var(--duration-fast) var(--ease-smooth);
+}
+
+.myord-tracker__dot--done {
+  border-color: var(--myord-status-color);
+  background: var(--myord-status-color);
+  color: #ffffff;
+}
+
+.myord-tracker__dot--current {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.06);
+  transform: scale(1.04);
+}
+
+.myord-tracker__dot--current::before,
+.myord-tracker__dot--current::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.myord-tracker__dot--current::before {
+  inset: -7px;
+  background: radial-gradient(circle, var(--myord-status-glow) 0%, transparent 72%);
+  opacity: 0.48;
+  transform: scale(0.9);
+  animation: myord-status-breathe 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.myord-tracker__dot--current::after {
+  inset: -3px;
+  border: 1px solid var(--myord-status-ring);
+  opacity: 0.72;
+  animation: myord-status-ring 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.myord-tracker__label {
+  position: relative;
+  z-index: 1;
+  max-width: 74px;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.myord-tracker__label--done {
+  color: var(--myord-status-color);
+  font-weight: 700;
+}
+
+.myord-tracker__line {
+  position: absolute;
+  top: 11px;
+  left: calc(50% + 12px);
+  right: calc(-50% + 12px);
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.myord-tracker__line--done {
+  background: var(--myord-status-color);
+}
+
+@keyframes myord-status-breathe {
+  0%,
+  100% {
+    opacity: 0.38;
+    transform: scale(0.9);
+  }
+
+  50% {
+    opacity: 0.84;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes myord-status-ring {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.2;
+    transform: scale(1.16);
+  }
+}
+
+.myord-card__tracking {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.myord-card__tracking-label {
+  font-size: var(--buyer-number-meta-size);
+  line-height: var(--buyer-number-meta-line);
+  font-weight: var(--buyer-number-meta-weight);
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.myord-card__tracking-value {
+  font-size: var(--type-body-size);
+  line-height: var(--type-line-body);
+  font-weight: var(--type-weight-semibold);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.myord-card__tracking-value--button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.myord-card__tracking-code {
+  font-size: var(--type-body-size);
+  line-height: var(--type-line-body);
+  font-weight: var(--type-weight-semibold);
+  letter-spacing: 0.02em;
+  word-break: break-word;
+}
+
+.myord-card__tracking-copy {
+  font-size: var(--buyer-number-meta-size);
+  line-height: var(--buyer-number-meta-line);
+  font-weight: var(--buyer-number-meta-weight);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 360px) {
+  .myord-card__header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .myord-card__total {
+    white-space: normal;
+  }
+
+  .myord-tracker__label {
+    max-width: 58px;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .myord-tracker__dot {
+    transition: none;
+  }
+
+  .myord-tracker__dot--current::before,
+  .myord-tracker__dot--current::after {
+    animation: none;
+    transform: none;
+  }
+
+  .myord-tracker__dot--current::before {
+    opacity: 0.32;
+  }
+
+  .myord-tracker__dot--current::after {
+    opacity: 0.45;
+  }
+}

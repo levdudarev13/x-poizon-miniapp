@@ -1,0 +1,104 @@
+:root {
+  /* Background layers */
+  --bg-base:        #0a0a0a;
+  --bg-surface:     #111111;
+  --bg-card:        #181818;
+  --bg-card-hover:  #1f1f1f;
+  --bg-input:       #161616;
+
+  /* Accent */
+  --accent:         #00c8c8;
+  --accent-dim:     #00c8c820;
+  --accent-glow:    #00c8c840;
+  --accent-dark:    #008f8f;
+  --admin-accent:      #c084fc;
+  --admin-accent-dim:  #c084fc20;
+  --admin-accent-glow: #c084fc40;
+  --admin-accent-dark: #9333ea;
+
+  /* Text */
+  --text-primary:   #ffffff;
+  --text-secondary: #888888;
+  --text-muted:     #444444;
+
+  /* Status colors */
+  --status-pending: #F59E0B;
+  --status-progress: #3B82F6;
+  --status-complete: #22C55E;
+  --color-success:  var(--status-complete);
+  --color-warning:  var(--status-pending);
+  --color-error:    #ef4444;
+  --color-info:     var(--status-progress);
+
+  /* Border */
+  --border:         #ffffff0d;
+  --border-accent:  #00c8c830;
+
+  /* Radius */
+  --radius-sm:   8px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-xl:   28px;
+  --radius-full: 9999px;
+
+  /* Spacing */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Shell layout */
+  --shell-nav-height: 84px;
+  --nav-height: var(--shell-nav-height);
+  --shell-page-x: 16px;
+  --shell-page-top: 12px;
+  --shell-tab-slide-distance: 36px;
+  --shell-press-scale: 0.96;
+  --shell-motion-duration: 280ms;
+  --shell-safe-top: 0px;
+  --shell-safe-bottom: 0px;
+  --shell-content-safe-bottom: 0px;
+  --shell-viewport-stable-height: 100vh;
+  --shell-keyboard-offset: 0px;
+  --shell-nav-translate: 0px;
+  --shell-nav-hidden: 0;
+  --shell-page-bottom-padding: calc(var(--shell-nav-height) + var(--shell-content-safe-bottom) + 16px);
+  --shell-bottom-action-offset: calc(var(--shell-nav-height) + var(--shell-content-safe-bottom));
+
+  /* Transitions */
+  --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:    cubic-bezier(0.0, 0.0, 0.2, 1);
+  --duration-fast:   150ms;
+  --duration-normal: var(--shell-motion-duration);
+  --duration-slow:   420ms;
+
+  /* Typography */
+  --font-sans: 'Onest Variable', 'SF Pro Display', -apple-system, 'Segoe UI', sans-serif;
+  --type-body-size: 16px;
+  --type-label-size: 14px;
+  --type-heading-size: 20px;
+  --type-display-size: 28px;
+  --type-weight-regular: 400;
+  --type-weight-semibold: 600;
+  --type-line-body: 1.5;
+  --type-line-label: 1.35;
+  --type-line-heading: 1.25;
+  --type-line-display: 1.15;
+  --buyer-number-total-size: 24px;
+  --buyer-number-total-line: 1.15;
+  --buyer-number-total-weight: 600;
+  --buyer-number-price-size: 16px;
+  --buyer-number-price-line: 1.4;
+  --buyer-number-price-weight: 600;
+  --buyer-number-meta-size: 13px;
+  --buyer-number-meta-line: 1.45;
+  --buyer-number-meta-weight: 500;
+  --buyer-motion-duration-quick: 180ms;
+  --buyer-motion-duration-standard: 240ms;
+  --buyer-motion-duration-emphasis: 320ms;
+  --buyer-press-scale: 0.97;
+}
