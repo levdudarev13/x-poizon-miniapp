@@ -365,8 +365,8 @@ export function AdminOrders({ initData, onBack, haptic, tg }) {
     { label: 'В пути', value: selectedUser.shipped_items, sub: selectedUser.arrived_items ? `${selectedUser.arrived_items} доставлено` : 'Пока без доставленных' },
     { label: 'Сумма', value: formatAdminRub(selectedUser.total_with_margin_rub), sub: selectedUser.latest_order_added_at_label === '—' ? 'Дата еще не зафиксирована' : `Последняя: ${selectedUser.latest_order_added_at_label}` },
   ] : [
-    { label: 'Клиентов', value: stats.users_total, sub: 'С активными заявками' },
-    { label: 'Заявок', value: stats.items_total, sub: `${stats.submitted_items} уже отправлены на оформление` },
+    { label: 'Клиентов', value: stats.users_total, sub: 'С отправленными заявками' },
+    { label: 'Заявок', value: stats.items_total, sub: 'Пользователи уже нажали «Оформить заказ»' },
     { label: 'Ожидают', value: stats.pending_items, sub: `${stats.shipped_items} уже в пути` },
     { label: 'Сумма', value: formatAdminRub(stats.total_with_margin_rub), sub: stats.latest_order_added_at_label === '—' ? 'Пока без дат' : `Последняя: ${stats.latest_order_added_at_label}` },
   ]
@@ -484,7 +484,7 @@ export function AdminOrders({ initData, onBack, haptic, tg }) {
                   <section className="admin-messages__empty card">
                     <span className="admin-shell__eyebrow">Пусто</span>
                     <h2 className="admin-pricing__hero-title">У этого клиента пока нет активных заявок</h2>
-                    <p className="admin-pricing__hero-subtitle">После следующего обновления сюда попадут все товары, которые еще остаются в активной заявке.</p>
+                    <p className="admin-pricing__hero-subtitle">Сюда попадают только товары, которые клиент уже отправил на рассмотрение через кнопку «Оформить заказ».</p>
                   </section>
                 ) : (
                   selectedUser.items.map((item, index) => {
@@ -580,7 +580,7 @@ export function AdminOrders({ initData, onBack, haptic, tg }) {
               <section className="admin-messages__empty card">
                 <span className="admin-shell__eyebrow">Пусто</span>
                 <h2 className="admin-pricing__hero-title">Активных заявок пока нет</h2>
-                <p className="admin-pricing__hero-subtitle">Как только пользователь добавит товар в заявку, он появится здесь без возврата в старый bot-flow.</p>
+                <p className="admin-pricing__hero-subtitle">Как только пользователь нажмет «Оформить заказ», отправленные позиции появятся здесь для проверки и дальнейших действий.</p>
               </section>
             ) : (
               <div className="admin-carts__list">

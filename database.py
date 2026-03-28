@@ -510,6 +510,7 @@ async def cart_get_all_orders() -> list[dict]:
                JOIN calculations c ON c.id = ci.calculation_id
                JOIN users u ON u.user_id = ci.user_id
                WHERE ci.in_order = 1
+                 AND ci.order_submitted = 1
                ORDER BY ci.user_id, COALESCE(ci.order_added_at, ci.added_at)""",
         ) as cur:
             rows = await cur.fetchall()

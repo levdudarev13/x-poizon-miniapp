@@ -18,7 +18,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
                 "arrived": 0,
                 "tracking_number": "",
                 "item_number": "501",
-                "order_submitted": 0,
+                "order_submitted": 1,
                 "delivery_snapshot_json": json.dumps({
                     "recipient_name": "Alice Example",
                     "phone": "+7 999 000-00-00",
@@ -47,6 +47,30 @@ class AdminOrdersHelpersTests(unittest.TestCase):
                     },
                     "breakdown": [{"label": "Товар", "amount_rub": 14160}],
                 }),
+            },
+            {
+                "user_id": 101,
+                "username": "alpha",
+                "calc_id": 13,
+                "paid": 0,
+                "shipped": 0,
+                "arrived": 0,
+                "tracking_number": "",
+                "item_number": "",
+                "order_submitted": 0,
+                "delivery_snapshot_json": "",
+                "submission_batch_id": "",
+                "submitted_at": "",
+                "order_added_at": "2026-03-21 15:00:00",
+                "name": "Draft Product",
+                "short_name": "",
+                "product_url": "https://example.com/draft",
+                "price_cny": 1500,
+                "subtotal_rub": 17000,
+                "total_with_margin_rub": 18200,
+                "platform": "poizon",
+                "size": "",
+                "calc_json": "",
             },
             {
                 "user_id": 101,
@@ -137,7 +161,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         self.assertEqual(payload["stats"]["users_total"], 2)
         self.assertEqual(payload["stats"]["items_total"], 3)
         self.assertEqual(payload["stats"]["pending_items"], 1)
-        self.assertEqual(payload["stats"]["submitted_items"], 2)
+        self.assertEqual(payload["stats"]["submitted_items"], 3)
         self.assertEqual(payload["stats"]["paid_items"], 2)
         self.assertEqual(payload["stats"]["shipped_items"], 1)
         self.assertEqual(payload["stats"]["arrived_items"], 0)
@@ -149,6 +173,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         self.assertEqual(first_user["display_name"], "@alpha")
         self.assertEqual(first_user["total_items"], 2)
         self.assertEqual(first_user["pending_items"], 1)
+        self.assertEqual(first_user["submitted_items"], 2)
         self.assertEqual(first_user["paid_items"], 1)
         self.assertEqual(first_user["latest_order_added_at_label"], "20.03.2026 в 12:30")
         self.assertEqual([item["calc_id"] for item in first_user["items"]], [12, 11])
@@ -163,7 +188,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         self.assertEqual(first_user["items"][0]["submission_batch_id"], "sub-101-002")
         self.assertEqual(first_user["items"][0]["submitted_at"], "2026-03-20T12:31:00")
         self.assertIn("delivery_data", first_user["items"][1])
-        self.assertEqual(first_user["items"][1]["status_key"], "in_order")
+        self.assertEqual(first_user["items"][1]["status_key"], "submitted")
         self.assertEqual(first_user["items"][1]["tracking_number"], "")
         self.assertEqual(first_user["items"][1]["item_number"], "501")
         self.assertEqual(
@@ -359,12 +384,14 @@ class AdminOrdersHelpersTests(unittest.TestCase):
 
         user = payload["users"][0]
         self.assertEqual(user["user_id"], 303)
-        self.assertEqual([item["calc_id"] for item in user["items"]], [34, 31, 32, 33])
-        self.assertEqual(user["items"][0]["submission_batch_id"], "")
-        self.assertEqual(user["items"][0]["submitted_at"], "")
-        self.assertEqual(user["items"][1]["delivery_data"]["house"], "7B")
-        self.assertEqual(user["items"][1]["submission_batch_id"], "sub-303-001")
-        self.assertEqual(user["items"][1]["submitted_at"], "2026-03-21T08:00:00")
+        self.assertEqual([item["calc_id"] for item in user["items"]], [31, 32, 33])
+        self.assertEqual(user["total_items"], 3)
+        self.assertEqual(user["pending_items"], 3)
+        self.assertIn("21.03.2026", user["latest_order_added_at_label"])
+        self.assertTrue(user["latest_order_added_at_label"].endswith("15:00"))
+        self.assertEqual(user["items"][0]["delivery_data"]["house"], "7B")
+        self.assertEqual(user["items"][0]["submission_batch_id"], "sub-303-001")
+        self.assertEqual(user["items"][0]["submitted_at"], "2026-03-21T08:00:00")
 
         latest_submission = max(
             (
@@ -394,7 +421,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
             [item["delivery_data"] for item in latest_batch_items],
             [latest_snapshot, latest_snapshot],
         )
-        self.assertEqual(user["items"][2]["delivery_data"]["city"], "Saint Petersburg")
+        self.assertEqual(user["items"][1]["delivery_data"]["city"], "Saint Petersburg")
         self.assertNotEqual(
             user["items"][0]["submission_batch_id"],
             latest_batch_items[0]["submission_batch_id"],

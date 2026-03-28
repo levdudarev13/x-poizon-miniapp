@@ -1359,7 +1359,11 @@ async def _notify_admin_order_action(action: str, item: dict) -> None:
 
 
 async def _admin_orders_payload() -> dict:
-    rows = await db.cart_get_all_orders()
+    rows = [
+        row
+        for row in await db.cart_get_all_orders()
+        if bool(row.get("order_submitted"))
+    ]
 
     stats = {
         "users_total": 0,
@@ -1440,7 +1444,7 @@ async def _admin_orders_payload() -> dict:
         }
 
         user_payload["total_items"] += 1
-        user_payload["pending_items"] += int(item_payload["status_key"] in {"in_order", "submitted"})
+        user_payload["pending_items"] += int(item_payload["status_key"] == "submitted")
         user_payload["submitted_items"] += int(item_payload["order_submitted"])
         user_payload["paid_items"] += int(item_payload["paid"])
         user_payload["shipped_items"] += int(item_payload["shipped"])
@@ -1452,7 +1456,7 @@ async def _admin_orders_payload() -> dict:
             user_payload["latest_order_added_at"] = order_added_at
             user_payload["latest_order_added_at_label"] = _format_admin_message_datetime(order_added_at)
 
-        stats["pending_items"] += int(item_payload["status_key"] in {"in_order", "submitted"})
+        stats["pending_items"] += int(item_payload["status_key"] == "submitted")
         stats["submitted_items"] += int(item_payload["order_submitted"])
         stats["paid_items"] += int(item_payload["paid"])
         stats["shipped_items"] += int(item_payload["shipped"])
@@ -1503,7 +1507,11 @@ async def _admin_orders_update_payload(payload: dict) -> dict:
     if user_id <= 0 or calc_id <= 0:
         raise ValueError("user_id and calc_id are required")
 
-    rows = await db.cart_get_all_orders()
+    rows = [
+        row
+        for row in await db.cart_get_all_orders()
+        if bool(row.get("order_submitted"))
+    ]
     item = next(
         (
             row
