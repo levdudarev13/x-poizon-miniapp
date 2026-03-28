@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://213.171.26.232/api/:path*"
+      "destination": "https://api.getsuga.xyz/api/:path*"
     }
   ]
 }
