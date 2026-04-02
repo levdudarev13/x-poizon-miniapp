@@ -29,7 +29,7 @@
   gap: 14px;
   border-color: rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(circle at top right, rgba(192, 132, 252, 0.1), transparent 34%),
+    radial-gradient(circle at top right, rgba(198, 255, 46, 0.1), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
     var(--bg-card);
 }
@@ -59,7 +59,7 @@
 .admin-pricing__stat-card {
   border-color: rgba(255, 255, 255, 0.07);
   background:
-    radial-gradient(circle at top right, rgba(192, 132, 252, 0.08), transparent 34%),
+    radial-gradient(circle at top right, rgba(198, 255, 46, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
     var(--bg-card);
 }
@@ -84,10 +84,10 @@
 }
 
 .admin-pricing__dirty {
-  border-color: rgba(192, 132, 252, 0.24);
+  border-color: rgba(198, 255, 46, 0.28);
   box-shadow:
-    0 0 0 1px rgba(192, 132, 252, 0.08) inset,
-    0 20px 40px -32px rgba(192, 132, 252, 0.55);
+    0 0 0 1px rgba(20, 61, 33, 0.18) inset,
+    0 20px 40px -32px rgba(198, 255, 46, 0.44);
 }
 
 .admin-pricing__submit {
