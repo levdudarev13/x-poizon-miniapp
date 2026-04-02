@@ -1,20 +1,30 @@
 :root {
+  /* Brand primitives */
+  --brand-black-base: #050805;
+  --brand-black-surface: #0b120c;
+  --brand-black-card: #111914;
+  --brand-black-card-hover: #17221b;
+  --brand-black-input: #0e1510;
+  --brand-acid: #c6ff2e;
+  --brand-green-rich: #1f5a31;
+  --brand-green-deep: #143d21;
+
   /* Background layers */
-  --bg-base:        #0a0a0a;
-  --bg-surface:     #111111;
-  --bg-card:        #181818;
-  --bg-card-hover:  #1f1f1f;
-  --bg-input:       #161616;
+  --bg-base:        var(--brand-black-base);
+  --bg-surface:     var(--brand-black-surface);
+  --bg-card:        var(--brand-black-card);
+  --bg-card-hover:  var(--brand-black-card-hover);
+  --bg-input:       var(--brand-black-input);
 
   /* Accent */
-  --accent:         #00c8c8;
-  --accent-dim:     #00c8c820;
-  --accent-glow:    #00c8c840;
-  --accent-dark:    #008f8f;
-  --admin-accent:      #c084fc;
-  --admin-accent-dim:  #c084fc20;
-  --admin-accent-glow: #c084fc40;
-  --admin-accent-dark: #9333ea;
+  --accent: var(--brand-acid);
+  --accent-dim: #c6ff2e24;
+  --accent-glow: #c6ff2e55;
+  --accent-dark: #76b61e;
+  --admin-accent: var(--accent);
+  --admin-accent-dim: var(--accent-dim);
+  --admin-accent-glow: var(--accent-glow);
+  --admin-accent-dark: var(--accent-dark);
 
   /* Text */
   --text-primary:   #ffffff;
@@ -32,7 +42,7 @@
 
   /* Border */
   --border:         #ffffff0d;
-  --border-accent:  #00c8c830;
+  --border-accent:  #c6ff2e33;
 
   /* Radius */
   --radius-sm:   8px;
@@ -77,13 +87,14 @@
   --duration-slow:   420ms;
 
   /* Typography */
+  --font-display: 'Onest Variable', 'SF Pro Display', -apple-system, 'Segoe UI', sans-serif;
   --font-sans: 'Onest Variable', 'SF Pro Display', -apple-system, 'Segoe UI', sans-serif;
   --type-body-size: 16px;
   --type-label-size: 14px;
-  --type-heading-size: 20px;
-  --type-display-size: 28px;
+  --type-heading-size: 22px;
+  --type-display-size: 30px;
   --type-weight-regular: 400;
-  --type-weight-semibold: 600;
+  --type-weight-semibold: 650;
   --type-line-body: 1.5;
   --type-line-label: 1.35;
   --type-line-heading: 1.25;
