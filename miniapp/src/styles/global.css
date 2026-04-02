@@ -39,7 +39,7 @@ body {
   right: -80px;
   width: 340px;
   height: 340px;
-  background: radial-gradient(circle, #00c8c822 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(198, 255, 46, 0.18) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -51,7 +51,7 @@ body {
   left: -100px;
   width: 280px;
   height: 280px;
-  background: radial-gradient(circle, #00c8c812 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(20, 61, 33, 0.28) 0%, transparent 72%);
   pointer-events: none;
   z-index: 0;
 }
@@ -177,7 +177,9 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   line-height: var(--type-line-body);
   position: relative;
   overflow: hidden;
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    0 22px 42px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(198, 255, 46, 0.04) inset;
 }
 
 .card::before {
@@ -185,7 +187,8 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+  background:
+    linear-gradient(135deg, rgba(198, 255, 46, 0.08) 0%, rgba(20, 61, 33, 0.12) 38%, transparent 70%);
   pointer-events: none;
 }
 
@@ -315,11 +318,14 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
 
 .ui-surface-panel {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(circle at top, rgba(198, 255, 46, 0.12) 0%, transparent 58%),
+    linear-gradient(180deg, rgba(20, 61, 33, 0.28) 0%, rgba(17, 25, 20, 0.96) 100%),
     var(--bg-card);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(198, 255, 46, 0.12);
   border-radius: var(--radius-lg);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.16);
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.18),
+    0 0 24px rgba(20, 61, 33, 0.18);
 }
 
 .ui-pill {
@@ -329,8 +335,9 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   min-height: var(--space-xl);
   padding: 0 var(--space-md);
   border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(198, 255, 46, 0.12);
+  background:
+    linear-gradient(180deg, rgba(20, 61, 33, 0.28) 0%, rgba(11, 18, 12, 0.92) 100%);
   color: var(--text-secondary);
   font-size: var(--type-label-size);
   line-height: var(--type-line-label);
@@ -365,12 +372,14 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   height: var(--space-2xl);
   min-height: var(--space-2xl);
   border-radius: var(--radius-full);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(198, 255, 46, 0.16);
   background:
-    radial-gradient(circle at top, rgba(0, 200, 200, 0.18) 0%, transparent 72%),
-    rgba(255, 255, 255, 0.02);
+    radial-gradient(circle at top, rgba(198, 255, 46, 0.24) 0%, transparent 72%),
+    linear-gradient(180deg, rgba(20, 61, 33, 0.22) 0%, rgba(11, 18, 12, 0.92) 100%);
   color: var(--text-primary);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.2),
+    0 0 18px var(--accent-glow);
 }
 
 .ui-loading {
@@ -408,7 +417,7 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   border-radius: 50%;
   transform: translate(-50%, -50%);
   background:
-    radial-gradient(circle, rgba(0, 200, 200, 0.2) 0%, rgba(0, 200, 200, 0.06) 38%, transparent 72%);
+    radial-gradient(circle, rgba(198, 255, 46, 0.2) 0%, rgba(20, 61, 33, 0.18) 38%, transparent 72%);
   opacity: 0.82;
   pointer-events: none;
   animation: ui-loading-halo 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
@@ -431,7 +440,7 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
 .ui-loading__ring--outer {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(circle at center, rgba(59, 130, 246, 0.08) 0%, transparent 62%);
+    radial-gradient(circle at center, rgba(20, 61, 33, 0.18) 0%, transparent 62%);
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.025),
     0 12px 28px rgba(0, 0, 0, 0.18);
@@ -439,10 +448,10 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
 
 .ui-loading__ring--accent {
   inset: 8px;
-  border: 1px solid rgba(0, 200, 200, 0.24);
+  border: 1px solid var(--border-accent);
   box-shadow:
-    0 0 0 1px rgba(0, 200, 200, 0.08),
-    0 0 22px rgba(0, 200, 200, 0.18);
+    0 0 0 1px rgba(198, 255, 46, 0.08),
+    0 0 22px var(--accent-glow);
   animation: ui-loading-ring 1.85s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
@@ -454,10 +463,10 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  border: 1px solid rgba(59, 130, 246, 0.22);
+  border: 1px solid rgba(198, 255, 46, 0.22);
   background:
-    radial-gradient(circle at top, rgba(0, 200, 200, 0.24) 0%, rgba(0, 200, 200, 0.08) 48%, rgba(255, 255, 255, 0.04) 100%);
-  color: var(--status-progress);
+    radial-gradient(circle at top, rgba(198, 255, 46, 0.24) 0%, rgba(20, 61, 33, 0.2) 48%, rgba(255, 255, 255, 0.04) 100%);
+  color: var(--accent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 8px 20px rgba(0, 0, 0, 0.16);
@@ -486,7 +495,7 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   overflow: hidden;
   border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(198, 255, 46, 0.12);
 }
 
 .ui-loading__bar {
@@ -497,8 +506,8 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   height: calc(100% - 2px);
   border-radius: inherit;
   background:
-    linear-gradient(90deg, rgba(0, 200, 200, 0.2) 0%, rgba(59, 130, 246, 0.92) 50%, rgba(0, 200, 200, 0.2) 100%);
-  box-shadow: 0 0 14px rgba(59, 130, 246, 0.34);
+    linear-gradient(90deg, rgba(20, 61, 33, 0.4) 0%, var(--accent) 50%, rgba(198, 255, 46, 0.2) 100%);
+  box-shadow: 0 0 14px var(--accent-glow);
   transform: translateX(-120%);
   animation: ui-loading-bar 1.35s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
@@ -513,7 +522,7 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgba(59, 130, 246, 0.46);
+  background: rgba(198, 255, 46, 0.46);
   animation: ui-loading-dot 0.96s ease-in-out infinite;
 }
 
@@ -589,8 +598,8 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   background:
-    radial-gradient(circle at top, rgba(0, 200, 200, 0.12) 0%, transparent 72%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(circle at top, rgba(198, 255, 46, 0.12) 0%, transparent 72%),
+    linear-gradient(180deg, rgba(20, 61, 33, 0.24) 0%, rgba(255, 255, 255, 0) 100%),
     var(--bg-card);
   min-height: calc(var(--space-3xl) * 2);
 }
@@ -691,9 +700,11 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   padding: 0 var(--space-lg);
   border-radius: var(--radius-full);
   border: 1px solid var(--border-accent);
-  background: linear-gradient(180deg, rgba(0, 200, 200, 0.2) 0%, rgba(0, 200, 200, 0.12) 100%);
+  background: linear-gradient(180deg, rgba(198, 255, 46, 0.2) 0%, rgba(20, 61, 33, 0.24) 100%);
   color: var(--text-primary);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.2),
+    0 0 18px rgba(198, 255, 46, 0.1);
 }
 
 .ui-state__actions {
@@ -737,8 +748,8 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   border: 1px solid var(--border);
   overflow: hidden;
   background:
-    radial-gradient(circle at top, rgba(0, 200, 200, 0.14) 0%, transparent 72%),
-    rgba(255, 255, 255, 0.03);
+    radial-gradient(circle at top, rgba(198, 255, 46, 0.14) 0%, transparent 72%),
+    linear-gradient(180deg, rgba(20, 61, 33, 0.24) 0%, rgba(255, 255, 255, 0.03) 100%);
   color: var(--accent);
   font-size: var(--type-label-size);
   line-height: var(--type-line-label);
@@ -791,8 +802,8 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 28px 28px 0 0;
   background:
-    radial-gradient(circle at top, rgba(0, 200, 200, 0.12) 0%, transparent 58%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(circle at top, rgba(198, 255, 46, 0.12) 0%, transparent 58%),
+    linear-gradient(180deg, rgba(20, 61, 33, 0.28) 0%, rgba(255, 255, 255, 0) 100%),
     var(--bg-card);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.38);
 }
@@ -829,8 +840,8 @@ body[data-shell-keyboard-open='1'] .bottom-nav {
   min-height: 28px;
   padding: 0 var(--space-md);
   border-radius: var(--radius-full);
-  border: 1px solid rgba(0, 200, 200, 0.26);
-  background: rgba(0, 200, 200, 0.12);
+  border: 1px solid rgba(198, 255, 46, 0.26);
+  background: rgba(20, 61, 33, 0.28);
   color: var(--accent);
   font-size: 12px;
   line-height: 1;
