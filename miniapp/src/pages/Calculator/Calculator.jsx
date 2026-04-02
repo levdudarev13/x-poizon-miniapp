@@ -74,7 +74,7 @@ async function apiFetch(path, opts = {}, retries = 2) {
   }
 }
 
-const P_COLOR = { poizon: '#00c8c8', taobao: '#ff6b35', '1688': '#e74c3c', unknown: '#555' }
+const P_COLOR = { poizon: 'var(--accent)', taobao: '#ff6b35', '1688': '#e74c3c', unknown: '#555' }
 const P_NAME  = { poizon: 'Poizon', taobao: 'Taobao', '1688': '1688', unknown: 'Unknown' }
 const NAME_SEARCH_PLATFORMS = new Set(['poizon', 'taobao', '1688'])
 const NAME_SEARCH_PLATFORM_OPTIONS = [
@@ -338,7 +338,7 @@ const CALC_CURATED_SHOWCASE_PRODUCTS = [
   // },
 ]
 
-const SHOWCASE_DEFAULT_ACCENT = '#00c8c8'
+const SHOWCASE_DEFAULT_ACCENT = 'var(--accent)'
 const SHOWCASE_EDITOR_SECTIONS = [
   { id: 'top', title: 'Верхний ряд', start: 0, end: 5 },
   { id: 'bottom', title: 'Нижний ряд', start: 5, end: 10 },
@@ -360,7 +360,7 @@ function buildShowcaseProductNote(product) {
   return [size, brand || category].filter(Boolean).join(' / ')
 }
 
-function buildCuratedShowcaseProducts() {
+function _buildCuratedShowcaseProducts() {
   return CALC_CURATED_SHOWCASE_PRODUCTS
     .map((item, index) => ({
       id: item.id || `curated-${index}`,
@@ -378,7 +378,7 @@ function buildCuratedShowcaseProducts() {
     .filter((item) => item.name)
 }
 
-function buildHistoryShowcaseProducts(items) {
+function _buildHistoryShowcaseProducts(items) {
   if (!Array.isArray(items)) {
     return []
   }

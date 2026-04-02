@@ -1,7 +1,7 @@
 .delivery-profile {
   padding-bottom: 0;
   background:
-    radial-gradient(circle at top right, rgba(0, 200, 200, 0.14) 0%, rgba(0, 200, 200, 0.03) 24%, transparent 54%),
+    radial-gradient(circle at top right, rgba(198, 255, 46, 0.14) 0%, rgba(20, 61, 33, 0.12) 24%, transparent 54%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(8, 13, 15, 0.94) 26%, rgba(10, 10, 10, 0.98) 100%);
 }
 
@@ -76,9 +76,9 @@
   gap: 10px;
   padding: 18px;
   border-radius: calc(var(--radius-xl) - 2px);
-  border: 1px solid rgba(0, 200, 200, 0.16);
+  border: 1px solid rgba(198, 255, 46, 0.16);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.012) 42%, rgba(0, 200, 200, 0.05) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.012) 42%, rgba(198, 255, 46, 0.05) 100%),
     rgba(11, 16, 18, 0.94);
   box-shadow:
     0 20px 36px rgba(0, 0, 0, 0.2),
@@ -91,7 +91,7 @@
   font-weight: var(--type-weight-semibold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(141, 245, 255, 0.72);
+  color: rgba(239, 255, 191, 0.72);
 }
 
 .delivery-profile__summary-meta {
@@ -141,9 +141,9 @@
 }
 
 .delivery-profile__requirement--ready {
-  border-color: rgba(78, 225, 239, 0.2);
+  border-color: rgba(198, 255, 46, 0.2);
   background:
-    linear-gradient(180deg, rgba(0, 200, 200, 0.06) 0%, rgba(255, 255, 255, 0.012) 100%),
+    linear-gradient(180deg, rgba(198, 255, 46, 0.06) 0%, rgba(255, 255, 255, 0.012) 100%),
     rgba(12, 18, 20, 0.95);
 }
 
@@ -162,10 +162,10 @@
 
 .delivery-profile__requirement--ready .delivery-profile__requirement-marker {
   color: #041415;
-  border-color: rgba(155, 255, 246, 0.32);
+  border-color: rgba(239, 255, 191, 0.32);
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.24) 0%, transparent 42%),
-    linear-gradient(135deg, #b5fff2 0%, #4ef0ef 52%, #0caeaf 100%);
+    linear-gradient(135deg, #efffbf 0%, var(--accent) 52%, var(--accent-dark) 100%);
 }
 
 .delivery-profile__requirement-copy {
@@ -198,7 +198,7 @@
 }
 
 .delivery-profile__requirement--ready .delivery-profile__requirement-state {
-  color: #94f5f0;
+  color: #efffbf;
 }
 
 .delivery-profile__form {
@@ -230,29 +230,29 @@
 }
 
 .delivery-profile__field--blocking {
-  border-color: rgba(0, 200, 200, 0.14);
+  border-color: rgba(198, 255, 46, 0.14);
   background:
-    linear-gradient(180deg, rgba(0, 200, 200, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%),
+    linear-gradient(180deg, rgba(198, 255, 46, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%),
     rgba(13, 18, 20, 0.97);
 }
 
 .delivery-profile__field--missing {
-  border-color: rgba(92, 225, 236, 0.22);
+  border-color: rgba(198, 255, 46, 0.22);
   background:
-    linear-gradient(180deg, rgba(0, 200, 200, 0.08) 0%, rgba(255, 255, 255, 0.016) 100%),
+    linear-gradient(180deg, rgba(198, 255, 46, 0.08) 0%, rgba(255, 255, 255, 0.016) 100%),
     rgba(14, 19, 21, 0.97);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 14px 28px rgba(0, 0, 0, 0.14),
-    0 0 0 1px rgba(92, 225, 236, 0.1);
+    0 0 0 1px rgba(198, 255, 46, 0.1);
 }
 
 .delivery-profile__field:focus-within {
-  border-color: rgba(92, 225, 236, 0.34);
+  border-color: rgba(198, 255, 46, 0.34);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 14px 28px rgba(0, 0, 0, 0.16),
-    0 0 0 1px rgba(92, 225, 236, 0.16);
+    0 0 0 1px rgba(198, 255, 46, 0.16);
 }
 
 .delivery-profile__field--half {
@@ -283,11 +283,11 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(141, 245, 255, 0.66);
+  color: rgba(239, 255, 191, 0.66);
 }
 
 .delivery-profile__field-status--ready {
-  color: #9ff7f2;
+  color: #efffbf;
 }
 
 .delivery-profile__input {
@@ -314,7 +314,7 @@
 }
 
 .delivery-profile__field--missing .delivery-profile__input::placeholder {
-  color: rgba(141, 245, 255, 0.42);
+  color: rgba(239, 255, 191, 0.42);
 }
 
 .delivery-profile__footer {
@@ -363,11 +363,11 @@ body[data-shell-keyboard-open='1'] .delivery-profile__footer {
   color: #041415;
   background:
     radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.24) 0%, transparent 36%),
-    linear-gradient(135deg, #1de3e3 0%, var(--accent) 52%, #009191 100%);
+    linear-gradient(135deg, #efffbf 0%, var(--accent) 52%, var(--accent-dark) 100%);
   box-shadow:
     0 16px 28px rgba(0, 0, 0, 0.2),
     0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 18px rgba(0, 200, 200, 0.18);
+    0 0 18px rgba(198, 255, 46, 0.18);
   font-size: 15px;
   line-height: 1;
   font-weight: 700;

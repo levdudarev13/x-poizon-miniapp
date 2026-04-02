@@ -62,7 +62,7 @@ const CART_ICONS = {
 }
 
 const PLATFORM_COLORS = {
-  poizon: '#00c8c8',
+  poizon: 'var(--accent)',
   taobao: '#ff6b35',
   '1688':  '#e74c3c',
 }
