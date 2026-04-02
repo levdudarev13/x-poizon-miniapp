@@ -46,7 +46,7 @@
 }
 
 .bottom-nav__item--admin-active {
-  color: var(--admin-accent);
+  color: var(--accent);
 }
 
 .bottom-nav__icon-wrap {
@@ -71,7 +71,7 @@
 }
 
 .bottom-nav__dot--admin {
-  background: var(--admin-accent);
+  background: var(--accent);
 }
 
 .bottom-nav__label {
@@ -138,7 +138,7 @@
 }
 
 .bottom-nav__fab--active .bottom-nav__fab-inner {
-  box-shadow: 0 0 28px #00c8c860;
+  box-shadow: 0 0 28px var(--accent-glow);
 }
 
 .bottom-nav--dense .bottom-nav__inner {

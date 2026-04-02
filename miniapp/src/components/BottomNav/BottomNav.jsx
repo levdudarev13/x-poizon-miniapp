@@ -47,11 +47,11 @@ export default function BottomNav({ active, onChange, cartCount = 0, isAdmin = f
                   animate={isActive
                     ? {
                         scale: prefersReducedMotion ? 1 : 1.02,
-                        boxShadow: '0 0 28px #00c8c860',
+                        boxShadow: '0 0 28px var(--accent-glow)',
                       }
                     : {
                         scale: 1,
-                        boxShadow: '0 0 0px #00c8c800',
+                        boxShadow: '0 0 0px transparent',
                       }}
                   transition={BUYER_MOTION.emphasis}
                 >

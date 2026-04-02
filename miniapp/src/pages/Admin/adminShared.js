@@ -95,7 +95,7 @@ const CART_PLATFORM_NAMES = {
 }
 
 const CART_PLATFORM_COLORS = {
-  poizon: '#00c8c8',
+  poizon: 'var(--accent)',
   taobao: '#ff7a45',
   '1688': '#ef5b4d',
 }
@@ -288,7 +288,7 @@ export function getCartPlatformName(platform) {
 }
 
 export function getCartPlatformColor(platform) {
-  return CART_PLATFORM_COLORS[platform] || 'var(--admin-accent)'
+  return CART_PLATFORM_COLORS[platform] || 'var(--accent)'
 }
 
 export function getAdminUserAvatarInitial(user) {
