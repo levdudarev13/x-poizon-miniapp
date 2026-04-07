@@ -22,6 +22,28 @@ export const IconCalculator = ({ size = 26 }) => (
   </svg>
 )
 
+export const IconCalculatorCube = ({ size = 26 }) => (
+  <svg width={size} height={size} viewBox="0 0 72 72" fill="none" aria-hidden="true">
+    <path d="M36 8 58 20 36 31.5 14 20 36 8Z" fill="#FFFFFF" />
+    <path d="M14 20 36 31.5V65L14 53.5V20Z" fill="#8E8F94" />
+    <path d="M58 20 36 31.5V65L58 53.5V20Z" fill="#74757A" />
+    <path d="M34.3 31.5h3.4V65h-3.4z" fill="#FFFFFF" />
+    <path d="M47 22.2h4.3v15.8l-4.3 2.3z" fill="#FFFFFF" />
+    <path d="M16.8 19.6 36 30.2 55.2 19.6" stroke="#FFFFFF" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20.2 41.7 31.4 47.4" stroke="#FFFFFF" strokeWidth="3.1" strokeLinecap="round" />
+    <path d="M20.2 49.1 29.1 53.7" stroke="#FFFFFF" strokeWidth="3.1" strokeLinecap="round" />
+    <path d="M36 5.3 46.2 10.7 36 15.9 25.8 10.7 36 5.3Z" fill="#8A8C91" />
+    <path d="M24.2 11.8 33.3 16.6 24.2 21.2 15.1 16.6 24.2 11.8Z" fill="#8A8C91" />
+    <path d="M47.8 11.8 56.9 16.6 47.8 21.2 38.7 16.6 47.8 11.8Z" fill="#8A8C91" />
+    <path d="M13.3 18.2 25.6 24.6 13.3 30.8 1 24.6 13.3 18.2Z" fill="#8A8C91" />
+    <path d="M58.7 18.2 71 24.6 58.7 30.8 46.4 24.6 58.7 18.2Z" fill="#8A8C91" />
+    <path d="M24.2 24.6 33.5 29.4 24.2 34 14.9 29.4 24.2 24.6Z" fill="#8A8C91" />
+    <path d="M47.8 24.6 57.1 29.4 47.8 34 38.5 29.4 47.8 24.6Z" fill="#8A8C91" />
+    <path d="M36 18.7 43.1 22.4 36 26.1 28.9 22.4 36 18.7Z" fill="#8A8C91" />
+    <path d="M36 30.6 50.2 38 36 45.2 21.8 38 36 30.6Z" fill="#8A8C91" />
+  </svg>
+)
+
 export const IconProfile = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8"/>
@@ -64,6 +86,14 @@ export const IconLink = ({ size = 20 }) => (
   </svg>
 )
 
+export const IconImage = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" strokeWidth="1.8" />
+    <circle cx="9" cy="10" r="1.5" fill="currentColor" />
+    <path d="m7 17 4.2-4.4a1 1 0 0 1 1.46.03L16 16l2-2.1a1 1 0 0 1 1.45 0L21 15.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
 export const IconTrash = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <path d="M3 6h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
@@ -85,6 +115,14 @@ export const IconCheck = ({ size = 18 }) => (
   </svg>
 )
 
+export const IconSave = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <path d="M5 4h11l3 3v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8 4v6h7V5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8 20v-5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
 export const IconChevronDown = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -96,6 +134,20 @@ export const IconInfo = ({ size = 18 }) => (
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
     <path d="M12 11.5V16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
     <path d="M12 8h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
+  </svg>
+)
+
+export const IconQuestion = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+    <path
+      d="M9.85 9.55a2.4 2.4 0 1 1 3.84 1.93c-.96.67-1.69 1.19-1.69 2.46"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path d="M12 17.1h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
   </svg>
 )
 

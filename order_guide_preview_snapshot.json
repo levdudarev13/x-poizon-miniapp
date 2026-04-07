@@ -1,0 +1,248 @@
+{
+  "product": {
+    "url": "https://fast.dewu.com/router/product/ProductDetail?spuId=5631050&sourceName=shareDetail&outside_channel_type=0&share_platform_title=7&fromUserId=6441838e0d5af38cdf0c6da76686698d&skuId=628427964&propertyValueId=276554271&gSource=product&gContentId=5631050&gContentFlag=38&gType=1",
+    "platform": "poizon",
+    "name": "Nike Sb Janoski+ Lilac Medium Soft Pink",
+    "brand": "",
+    "price_cny": 205.0,
+    "price_is_starting": false,
+    "size": "Purple / 38",
+    "category": "sneakers",
+    "weight_kg": null,
+    "weight_estimated": false,
+    "city": "",
+    "delivery_type": "",
+    "image_url": "https://cdn.poizon.com/pro-img/origin-img/20251205/702385d2d6294e90bcc78d1e2b0b5295.jpg",
+    "extra_images": [
+      "https://cdn.poizon.com/pro-img/origin-img/20251205/280fe31acd52458c9355151416f11496.jpg",
+      "https://cdn.poizon.com/pro-img/origin-img/20251205/cbfbacad057c49debbe344505e397b89.jpg",
+      "https://cdn.poizon.com/pro-img/origin-img/20251205/803005a7e7bc43be8648326a3763388e.jpg",
+      "https://cdn.poizon.com/pro-img/origin-img/20251205/a3562fdaba394dde9e2c83325a3f2072.jpg"
+    ],
+    "specs": {
+      "Brand": "Nike",
+      "Series": "DV5475-500",
+      "Material": "Замша",
+      "Fit": "All",
+      "Season": "весна, лето, осень, зима",
+      "Category": "Skateboard Shoes",
+      "Category L2": "Trendy Sneakers & Casual Shoes",
+      "Category L1": "Shoes",
+      "Release Date": "2023-08-14",
+      "Barcode": "196606764153",
+      "Sales": "66"
+    },
+    "available_sizes": [
+      "36",
+      "36.5",
+      "37.5",
+      "38",
+      "38.5",
+      "39",
+      "40",
+      "40.5",
+      "41",
+      "42",
+      "42.5",
+      "43",
+      "44",
+      "44.5",
+      "45",
+      "45.5",
+      "46"
+    ],
+    "variants": [
+      {
+        "name": "Size",
+        "options": [
+          "36",
+          "36.5",
+          "37.5",
+          "38",
+          "38.5",
+          "39",
+          "40",
+          "40.5",
+          "41",
+          "42",
+          "42.5",
+          "43",
+          "44",
+          "44.5",
+          "45",
+          "45.5",
+          "46"
+        ]
+      }
+    ],
+    "variant_price_map": {
+      "[[\"Size\", \"36\"]]": 327.0,
+      "[[\"Size\", \"36.5\"]]": 317.0,
+      "[[\"Size\", \"37.5\"]]": 327.0,
+      "[[\"Size\", \"38\"]]": 205.0,
+      "[[\"Size\", \"38.5\"]]": 259.0,
+      "[[\"Size\", \"39\"]]": 327.0,
+      "[[\"Size\", \"40\"]]": 497.0,
+      "[[\"Size\", \"40.5\"]]": 697.0,
+      "[[\"Size\", \"41\"]]": 328.0,
+      "[[\"Size\", \"42\"]]": 323.0,
+      "[[\"Size\", \"42.5\"]]": 327.0,
+      "[[\"Size\", \"43\"]]": 388.0,
+      "[[\"Size\", \"44\"]]": 367.0,
+      "[[\"Size\", \"44.5\"]]": 518.0,
+      "[[\"Size\", \"45\"]]": 597.0,
+      "[[\"Size\", \"45.5\"]]": 577.0,
+      "[[\"Size\", \"46\"]]": 597.0
+    },
+    "original_variants": [],
+    "notes": "",
+    "auto_detected": [
+      "name",
+      "price",
+      "size",
+      "image",
+      "sizes",
+      "category"
+    ]
+  },
+  "result": {
+    "product": {
+      "url": "https://fast.dewu.com/router/product/ProductDetail?spuId=5631050&sourceName=shareDetail&outside_channel_type=0&share_platform_title=7&fromUserId=6441838e0d5af38cdf0c6da76686698d&skuId=628427964&propertyValueId=276554271&gSource=product&gContentId=5631050&gContentFlag=38&gType=1",
+      "platform": "poizon",
+      "name": "Nike Sb Janoski+ Lilac Medium Soft Pink",
+      "brand": "",
+      "price_cny": 205.0,
+      "price_is_starting": false,
+      "size": "Purple / 38",
+      "category": "sneakers",
+      "weight_kg": 1.0,
+      "weight_estimated": true,
+      "city": "moscow",
+      "delivery_type": "standard",
+      "image_url": "https://cdn.poizon.com/pro-img/origin-img/20251205/702385d2d6294e90bcc78d1e2b0b5295.jpg",
+      "extra_images": [
+        "https://cdn.poizon.com/pro-img/origin-img/20251205/280fe31acd52458c9355151416f11496.jpg",
+        "https://cdn.poizon.com/pro-img/origin-img/20251205/cbfbacad057c49debbe344505e397b89.jpg",
+        "https://cdn.poizon.com/pro-img/origin-img/20251205/803005a7e7bc43be8648326a3763388e.jpg",
+        "https://cdn.poizon.com/pro-img/origin-img/20251205/a3562fdaba394dde9e2c83325a3f2072.jpg"
+      ],
+      "specs": {
+        "Brand": "Nike",
+        "Series": "DV5475-500",
+        "Material": "Замша",
+        "Fit": "All",
+        "Season": "весна, лето, осень, зима",
+        "Category": "Skateboard Shoes",
+        "Category L2": "Trendy Sneakers & Casual Shoes",
+        "Category L1": "Shoes",
+        "Release Date": "2023-08-14",
+        "Barcode": "196606764153",
+        "Sales": "66"
+      },
+      "available_sizes": [
+        "36",
+        "36.5",
+        "37.5",
+        "38",
+        "38.5",
+        "39",
+        "40",
+        "40.5",
+        "41",
+        "42",
+        "42.5",
+        "43",
+        "44",
+        "44.5",
+        "45",
+        "45.5",
+        "46"
+      ],
+      "variants": [
+        {
+          "name": "Size",
+          "options": [
+            "36",
+            "36.5",
+            "37.5",
+            "38",
+            "38.5",
+            "39",
+            "40",
+            "40.5",
+            "41",
+            "42",
+            "42.5",
+            "43",
+            "44",
+            "44.5",
+            "45",
+            "45.5",
+            "46"
+          ]
+        }
+      ],
+      "variant_price_map": {
+        "[[\"Size\", \"36\"]]": 327.0,
+        "[[\"Size\", \"36.5\"]]": 317.0,
+        "[[\"Size\", \"37.5\"]]": 327.0,
+        "[[\"Size\", \"38\"]]": 205.0,
+        "[[\"Size\", \"38.5\"]]": 259.0,
+        "[[\"Size\", \"39\"]]": 327.0,
+        "[[\"Size\", \"40\"]]": 497.0,
+        "[[\"Size\", \"40.5\"]]": 697.0,
+        "[[\"Size\", \"41\"]]": 328.0,
+        "[[\"Size\", \"42\"]]": 323.0,
+        "[[\"Size\", \"42.5\"]]": 327.0,
+        "[[\"Size\", \"43\"]]": 388.0,
+        "[[\"Size\", \"44\"]]": 367.0,
+        "[[\"Size\", \"44.5\"]]": 518.0,
+        "[[\"Size\", \"45\"]]": 597.0,
+        "[[\"Size\", \"45.5\"]]": 577.0,
+        "[[\"Size\", \"46\"]]": 597.0
+      },
+      "original_variants": [],
+      "notes": "",
+      "auto_detected": []
+    },
+    "subtotal_rub": 3596.8605000000002,
+    "total_with_margin_rub": 3596.8605000000002,
+    "margin_rub": 0,
+    "margin_percent": 0,
+    "exchange_rate": {
+      "cny_rub": 11.4481,
+      "usd_rub": 78.7277,
+      "eur_rub": 91.0034,
+      "updated_at": "2026-04-07T18:21:59.554086",
+      "age_seconds": 919.373111,
+      "age_human": "15 мин. назад",
+      "source": "cbr"
+    },
+    "breakdown": [
+      {
+        "label": "Товар",
+        "amount_rub": 2346.8605000000002,
+        "note": "205 ¥ × 11.45"
+      },
+      {
+        "label": "Комиссия (10%)",
+        "amount_rub": 250.0,
+        "note": "мин. 250 ₽"
+      },
+      {
+        "label": "Доставка до Москвы",
+        "amount_rub": 1000.0,
+        "note": "Обычная до Москвы • ~2 × 500 г"
+      }
+    ],
+    "delivery_info": {
+      "standard_days": "3-4 недели",
+      "express_days": "5-10 дней",
+      "cdek_days": "2-5 дней",
+      "includes_note": "В стоимость доставки входят облицовка и страховка.",
+      "payment_note": "Доставка оплачивается при получении."
+    },
+    "calc_id": 433,
+    "share_code": "KETL1T"
+  }
+}

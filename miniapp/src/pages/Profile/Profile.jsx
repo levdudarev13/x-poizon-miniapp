@@ -5,25 +5,21 @@ import {
   IconCheck,
   IconChevronRight,
   IconGift,
-  IconPackage,
-  IconShield,
   IconStatusShipped,
+  IconSupport,
 } from '../../components/ui/Icons'
+import BrandGemIcon from '../../components/ui/BrandGemIcon'
 import { useTelegram } from '../../hooks/useTelegram'
+import { DEFAULT_ADMIN_SUPPORT, normalizeAdminSupport } from '../../utils/support'
 import DeliveryProfile from './DeliveryProfile'
+import FaqSupport from './FaqSupport'
 import MyOrders from './MyOrders'
 import './Profile.css'
-
-const DEFAULT_ADMIN_SUPPORT = {
-  url: 'https://t.me/getsuga0',
-  username: 'getsuga0',
-  userId: 1096995802,
-}
 
 const MENU_ITEMS = [
   {
     id: 'orders',
-    icon: <IconPackage size={19} />,
+    icon: <BrandGemIcon size={19} colors={['currentColor', 'currentColor', 'currentColor']} />,
     label: 'Мои заказы',
     sub: 'Отслеживайте статус заказа и посылки',
     action: 'openOrders',
@@ -32,7 +28,7 @@ const MENU_ITEMS = [
     id: 'delivery',
     icon: <IconStatusShipped size={19} />,
     label: 'Данные для доставки',
-    sub: 'Сохраните получателя и адрес для следующих отправок',
+    sub: 'Заполните и сохраните\nнеобходимые данные',
     action: 'openDelivery',
   },
   {
@@ -44,78 +40,12 @@ const MENU_ITEMS = [
   },
   {
     id: 'support',
-    icon: <IconShield size={19} />,
-    label: 'Написать админу',
-    sub: 'Вопросы, предложения, помощь и поддержка',
-    action: 'openAdminChat',
+    icon: <IconSupport size={19} />,
+    label: 'FAQ и поддержка',
+    sub: 'Ответы на часто\nзадаваемые вопросы',
+    action: 'openFaq',
   },
 ]
-
-function normalizeAdminSupport(value) {
-  if (typeof value === 'string') {
-    const text = String(value || '').trim()
-    if (!text) {
-      return { ...DEFAULT_ADMIN_SUPPORT }
-    }
-
-    return {
-      ...DEFAULT_ADMIN_SUPPORT,
-      url: /^(https?:\/\/|tg:\/\/)/i.test(text)
-        ? text
-        : `https://t.me/${text.replace(/^@+/, '')}`,
-    }
-  }
-
-  const candidate = value && typeof value === 'object' ? value : {}
-  const rawUsername = typeof candidate.username === 'string' ? candidate.username : ''
-  const username = rawUsername.trim().replace(/^@+/, '')
-  const rawUrl = String(candidate.url || '').trim()
-  const numericUserId = Number(candidate.userId || candidate.user_id || 0)
-  const resolvedUserId = Number.isFinite(numericUserId) && numericUserId > 0
-    ? numericUserId
-    : DEFAULT_ADMIN_SUPPORT.userId
-  const normalizedUrl = rawUrl
-    ? (/^(https?:\/\/|tg:\/\/)/i.test(rawUrl) ? rawUrl : `https://t.me/${rawUrl.replace(/^@+/, '')}`)
-    : (username ? `https://t.me/${username}` : (resolvedUserId > 0 ? `tg://user?id=${resolvedUserId}` : DEFAULT_ADMIN_SUPPORT.url))
-
-  return {
-    url: normalizedUrl,
-    username,
-    userId: resolvedUserId,
-  }
-}
-
-function openAdminChat(support, { tg, haptic }) {
-  const target = normalizeAdminSupport(support)
-  const telegramUrl = target.username
-    ? `https://t.me/${target.username}`
-    : (/^(https?:\/\/t\.me\/|tg:\/\/)/i.test(target.url) ? target.url : '')
-  const userDeepLink = target.userId > 0 ? `tg://user?id=${target.userId}` : ''
-
-  try {
-    if (telegramUrl && typeof tg?.openTelegramLink === 'function') {
-      tg.openTelegramLink(telegramUrl)
-    } else if (telegramUrl && typeof tg?.openLink === 'function') {
-      tg.openLink(telegramUrl)
-    } else if (telegramUrl && typeof window.open === 'function') {
-      window.open(telegramUrl, '_blank', 'noopener,noreferrer')
-    } else if (userDeepLink) {
-      window.location.href = userDeepLink
-    } else if (typeof tg?.openLink === 'function') {
-      tg.openLink(target.url)
-    } else if (typeof window.open === 'function') {
-      window.open(target.url, '_blank', 'noopener,noreferrer')
-    } else {
-      window.location.href = target.url
-    }
-
-    haptic?.('light')
-    return true
-  } catch {
-    haptic?.('error')
-    return false
-  }
-}
 
 function readDeliveryCompletion(value) {
   if (typeof value === 'boolean') {
@@ -202,11 +132,44 @@ export default function Profile({
   supportLink = DEFAULT_ADMIN_SUPPORT,
   requestedView = null,
   onRequestedViewConsumed,
+  onRequestOpenOrderGuide,
+  guidePreview = null,
+  guideHighlightTarget = null,
 }) {
-  const { firstName, lastName, username, photoUrl, userId, initData, haptic, tg } = useTelegram()
-  const displayName = [firstName, lastName].filter(Boolean).join(' ')
+  const {
+    firstName,
+    lastName,
+    username: viewerUsername,
+    photoUrl: viewerPhotoUrl,
+    userId: viewerUserId,
+    initData: viewerInitData,
+    haptic,
+  } = useTelegram()
+  const isGuidePreview = Boolean(guidePreview)
+  const previewDisplayName = typeof guidePreview?.displayName === 'string'
+    ? guidePreview.displayName.trim()
+    : ''
+  const previewUsername = typeof guidePreview?.username === 'string'
+    ? guidePreview.username.replace(/^@+/, '').trim()
+    : ''
+  const previewPhotoUrl = typeof guidePreview?.photoUrl === 'string'
+    ? guidePreview.photoUrl.trim()
+    : ''
+  const resolvedGuideHighlightTarget = isGuidePreview ? (guideHighlightTarget || 'delivery') : null
+  const displayName = isGuidePreview
+    ? (previewDisplayName || 'Buyer 101')
+    : [firstName, lastName].filter(Boolean).join(' ')
+  const resolvedDisplayName = displayName
+  const resolvedUsername = isGuidePreview ? previewUsername : viewerUsername
+  const resolvedPhotoUrl = isGuidePreview ? previewPhotoUrl : viewerPhotoUrl
+  const resolvedUserId = isGuidePreview ? null : viewerUserId
+  const resolvedInitData = isGuidePreview ? '' : viewerInitData
+  const username = resolvedUsername
   const [view, setView] = useState('main')
-  const [deliveryComplete, setDeliveryComplete] = useState(null)
+  const [deliveryComplete, setDeliveryComplete] = useState(() => {
+    const previewCompletion = readDeliveryCompletion(guidePreview?.deliveryComplete)
+    return previewCompletion === null ? null : previewCompletion
+  })
   const adminSupport = normalizeAdminSupport(supportLink)
 
   const handleBackToMain = () => {
@@ -214,8 +177,6 @@ export default function Profile({
     setView('main')
   }
 
-  // Keep the seam tolerant while DeliveryProfile lands in parallel.
-  // Either `onCompletionChange(boolean)` or `onCompletionChange({ isComplete })` is accepted.
   const handleDeliveryCompletionChange = useCallback((nextValue) => {
     const nextComplete = readDeliveryCompletion(nextValue)
 
@@ -227,7 +188,19 @@ export default function Profile({
   }, [])
 
   useEffect(() => {
-    const blockShellSwipe = active && (view === 'orders' || view === 'delivery')
+    if (!isGuidePreview) {
+      return undefined
+    }
+
+    const previewCompletion = readDeliveryCompletion(guidePreview?.deliveryComplete)
+    setDeliveryComplete(previewCompletion === null ? null : previewCompletion)
+    setView('main')
+
+    return undefined
+  }, [guidePreview, isGuidePreview])
+
+  useEffect(() => {
+    const blockShellSwipe = active && (view === 'orders' || view === 'delivery' || view === 'faq')
     document.body.dataset.shellSwipeRootProfile = blockShellSwipe ? '0' : '1'
 
     return () => {
@@ -236,18 +209,22 @@ export default function Profile({
   }, [active, view])
 
   useEffect(() => {
-    if (requestedView === 'delivery') {
-      setView('delivery')
-      onRequestedViewConsumed?.()
-    }
-  }, [onRequestedViewConsumed, requestedView])
-
-  useEffect(() => {
-    if (!active) {
+    if (isGuidePreview) {
       return undefined
     }
 
-    if (!userId) {
+    if (requestedView === 'delivery' || requestedView === 'faq') {
+      setView(requestedView)
+      onRequestedViewConsumed?.()
+    }
+  }, [isGuidePreview, onRequestedViewConsumed, requestedView])
+
+  useEffect(() => {
+    if (isGuidePreview || !active) {
+      return undefined
+    }
+
+    if (!resolvedUserId) {
       setDeliveryComplete(null)
       return undefined
     }
@@ -260,7 +237,7 @@ export default function Profile({
 
     const syncDeliveryStatus = async () => {
       try {
-        const payload = await fetchDeliveryProfile({ userId })
+        const payload = await fetchDeliveryProfile({ userId: resolvedUserId })
         const nextComplete = readDeliveryCompletion(payload)
 
         if (!cancelled && nextComplete !== null) {
@@ -276,9 +253,13 @@ export default function Profile({
     return () => {
       cancelled = true
     }
-  }, [active, userId, view])
+  }, [active, isGuidePreview, resolvedUserId, view])
 
   const handleMenuClick = (item) => {
+    if (isGuidePreview) {
+      return
+    }
+
     if (item.action === 'openOrders') {
       haptic?.('light')
       setView('orders')
@@ -291,8 +272,9 @@ export default function Profile({
       return
     }
 
-    if (item.action === 'openAdminChat') {
-      openAdminChat(adminSupport, { tg, haptic })
+    if (item.action === 'openFaq') {
+      haptic?.('light')
+      setView('faq')
     }
   }
 
@@ -306,6 +288,17 @@ export default function Profile({
         active={active}
         onBack={handleBackToMain}
         onCompletionChange={handleDeliveryCompletionChange}
+      />
+    )
+  }
+
+  if (view === 'faq') {
+    return (
+      <FaqSupport
+        active={active}
+        supportLink={adminSupport}
+        onBack={handleBackToMain}
+        onRequestOpenOrderGuide={onRequestOpenOrderGuide}
       />
     )
   }
@@ -337,9 +330,9 @@ export default function Profile({
             <div className="profile-banner__sticky">
               <div className="profile-banner__inner">
                 <ProfileAvatar
-                  initData={initData}
-                  userId={userId}
-                  photoUrl={photoUrl}
+                  initData={resolvedInitData}
+                  userId={resolvedUserId}
+                  photoUrl={resolvedPhotoUrl}
                   displayName={displayName || 'Пользователь'}
                 />
 
@@ -358,7 +351,9 @@ export default function Profile({
           <div className="profile-menu">
             {MENU_ITEMS.filter((item) => item.id !== 'rate').map((item) => {
               const isPrimaryAction = item.id === 'orders' || item.id === 'delivery'
+              const isOrdersItem = item.id === 'orders'
               const isDeliveryItem = item.id === 'delivery'
+              const isSupportItem = item.id === 'support'
 
               return (
                 <button
@@ -368,8 +363,11 @@ export default function Profile({
                     'profile-menu-item card pressable',
                     isPrimaryAction ? 'profile-menu-item--primary' : '',
                     isDeliveryItem ? 'profile-menu-item--delivery' : '',
+                    isSupportItem ? 'profile-menu-item--support' : '',
                   ].filter(Boolean).join(' ')}
                   data-completion-state={isDeliveryItem ? deliveryCompletionState : undefined}
+                  data-order-guide-step-seven-target={isGuidePreview && isDeliveryItem && resolvedGuideHighlightTarget === 'delivery' ? 'card' : undefined}
+                  data-order-guide-step-nine-target={isGuidePreview && isOrdersItem && resolvedGuideHighlightTarget === 'orders' ? 'card' : undefined}
                   onClick={() => handleMenuClick(item)}
                 >
                   <div className={`profile-menu-item__icon${isDeliveryItem ? ' profile-menu-item__icon--delivery' : ''}`}>

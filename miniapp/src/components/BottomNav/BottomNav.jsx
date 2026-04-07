@@ -1,12 +1,13 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { BUYER_MOTION, BUYER_PRESS_SCALE } from '../../constants/buyerMotion'
-import { IconHistory, IconCart, IconCalculator, IconProfile, IconOrders, IconAdmin } from '../ui/Icons'
+import { IconHistory, IconCart, IconCalculatorCube, IconProfile, IconOrders, IconAdmin } from '../ui/Icons'
+import BrandGemIcon from '../ui/BrandGemIcon'
 import './BottomNav.css'
 
 const TABS_BASE = [
   { id: 'history', Icon: IconHistory, label: 'История' },
   { id: 'cart', Icon: IconCart, label: 'Корзина' },
-  { id: 'calculator', Icon: IconCalculator, label: null, center: true },
+  { id: 'calculator', Icon: IconCalculatorCube, label: null, center: true },
   { id: 'profile', Icon: IconProfile, label: 'Профиль' },
   { id: 'orders', Icon: IconOrders, label: 'Заявки' },
 ]
@@ -33,12 +34,11 @@ export default function BottomNav({ active, onChange, cartCount = 0, isAdmin = f
               <motion.button
                 key={id}
                 type="button"
-                className={`bottom-nav__fab pressable ${isActive ? 'bottom-nav__fab--active' : ''}`}
+                className={`bottom-nav__fab ${isActive ? 'bottom-nav__fab--active' : ''}`}
                 onClick={() => onChange(id)}
                 aria-label="Калькулятор"
                 data-nav-center="true"
                 data-nav-active={isActive ? 'true' : 'false'}
-                whileTap={prefersReducedMotion ? undefined : { scale: BUYER_PRESS_SCALE }}
                 transition={BUYER_MOTION.quick}
               >
                 <motion.div
@@ -47,22 +47,21 @@ export default function BottomNav({ active, onChange, cartCount = 0, isAdmin = f
                   animate={isActive
                     ? {
                         scale: prefersReducedMotion ? 1 : 1.02,
-                        boxShadow: '0 0 28px var(--accent-glow)',
                       }
                     : {
                         scale: 1,
-                        boxShadow: '0 0 0px transparent',
                       }}
                   transition={BUYER_MOTION.emphasis}
                 >
                   <motion.div
+                    className="bottom-nav__fab-art"
                     initial={false}
                     animate={prefersReducedMotion
-                      ? { opacity: isActive ? 1 : 0.88 }
-                      : { rotate: isActive ? 10 : 0, y: isActive ? -1 : 0, opacity: isActive ? 1 : 0.9 }}
+                      ? { opacity: isActive ? 1 : 0.9 }
+                      : { opacity: isActive ? 1 : 0.96 }}
                     transition={BUYER_MOTION.standard}
                   >
-                    <Icon size={isDense ? 22 : 26} />
+                    <BrandGemIcon />
                   </motion.div>
                 </motion.div>
               </motion.button>

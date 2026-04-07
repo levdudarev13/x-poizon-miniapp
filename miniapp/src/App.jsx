@@ -167,6 +167,21 @@ export default function App() {
     setActiveTab(nextTab)
   }, [activeTab, tabOrder])
 
+  const handleRequestOpenOrderGuide = useCallback(() => {
+    const nextTab = 'calculator'
+    const currentIndex = tabOrder.indexOf(activeTab)
+    const nextIndex = tabOrder.indexOf(nextTab)
+
+    if (currentIndex !== -1 && nextIndex !== -1 && currentIndex !== nextIndex) {
+      setTabDirection(nextIndex > currentIndex ? 1 : -1)
+    }
+
+    setActiveTab(nextTab)
+    window.setTimeout(() => {
+      calcRef.current?.openOrderGuide?.()
+    }, 50)
+  }, [activeTab, tabOrder])
+
   const emitSwipeHaptic = useCallback(() => {
     window.requestAnimationFrame(() => {
       haptic?.('light')
@@ -332,7 +347,13 @@ export default function App() {
     },
     {
       id: 'calculator',
-      content: <Calculator onCartChange={fetchCartCount} active={activeTab === 'calculator'} ref={calcRef} />,
+      content: (
+        <Calculator
+          onCartChange={fetchCartCount}
+          active={activeTab === 'calculator'}
+          ref={calcRef}
+        />
+      ),
     },
     {
       id: 'profile',
@@ -341,6 +362,7 @@ export default function App() {
           active={activeTab === 'profile'}
           requestedView={profileRequestedView}
           onRequestedViewConsumed={handleProfileRequestedViewConsumed}
+          onRequestOpenOrderGuide={handleRequestOpenOrderGuide}
           supportLink={{
             url: bootstrapPayload?.admin_contact_url,
             username: bootstrapPayload?.admin_contact_username,

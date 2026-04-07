@@ -16,11 +16,16 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from dotenv import load_dotenv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_FILE = os.path.join(BASE_DIR, ".env")
 SSH_EXE = shutil.which("ssh") or r"C:\Program Files\Git\usr\bin\ssh.exe"
 PYTHON_EXE = sys.executable
+load_dotenv(ENV_FILE)
+MINI_APP_PORT = int(os.getenv("MINI_APP_PORT", "8080"))
+LOCAL_SERVER_BASE_URL = f"http://127.0.0.1:{MINI_APP_PORT}"
+BOT_LOCK_NAME = os.getenv("BOT_LOCK_NAME", "buyer_bot.lock")
 
 WATCHDOG_INTERVAL_SECONDS = 45
 WATCHDOG_GRACE_SECONDS = 75
@@ -59,6 +64,7 @@ def update_env_url(new_url: str) -> None:
     with open(ENV_FILE, "w", encoding="utf-8") as f:
         f.write(content)
 
+    os.environ["MINI_APP_URL"] = new_url
     log(f"Updated MINI_APP_URL={new_url}")
 
 
@@ -142,7 +148,7 @@ def start_bot() -> None:
 
     import tempfile
 
-    lock = os.path.join(tempfile.gettempdir(), "buyer_bot.lock")
+    lock = os.path.join(tempfile.gettempdir(), BOT_LOCK_NAME)
     for attempt in range(8):
         try:
             os.remove(lock)
@@ -161,34 +167,34 @@ def start_bot() -> None:
             time.sleep(0.5)
 
     log("Starting bot...")
-    bot_proc = subprocess.Popen([PYTHON_EXE, "main.py"], cwd=BASE_DIR)
+    bot_proc = subprocess.Popen([PYTHON_EXE, "main.py"], cwd=BASE_DIR, env=os.environ.copy())
     log(f"Bot started (PID {bot_proc.pid})")
 
 
 def start_miniapp_server():
     global miniapp_proc, last_miniapp_restart_at
 
-    listener_pid = _find_listener_pid(8080)
+    listener_pid = _find_listener_pid(MINI_APP_PORT)
     if listener_pid:
         cmd = _process_command_line(listener_pid).lower()
         if "miniapp_server.py" in cmd:
-            log(f"Found stale miniapp_server on :8080 (PID {listener_pid}); restarting it")
+            log(f"Found stale miniapp_server on :{MINI_APP_PORT} (PID {listener_pid}); restarting it")
             _terminate_pid(listener_pid, "miniapp_server")
             time.sleep(1)
         else:
-            log(f"Port :8080 is already used by PID {listener_pid}; leaving it untouched")
+            log(f"Port :{MINI_APP_PORT} is already used by PID {listener_pid}; leaving it untouched")
             return None
 
     if miniapp_proc and miniapp_proc.poll() is None:
         log(
             "Tracked miniapp_server process is still running without serving "
-            f":8080 (PID {miniapp_proc.pid}); restarting it"
+            f":{MINI_APP_PORT} (PID {miniapp_proc.pid}); restarting it"
         )
         kill_proc(miniapp_proc, "miniapp_server")
         time.sleep(1)
 
     log("Starting miniapp_server...")
-    miniapp_proc = subprocess.Popen([PYTHON_EXE, "miniapp_server.py"], cwd=BASE_DIR)
+    miniapp_proc = subprocess.Popen([PYTHON_EXE, "miniapp_server.py"], cwd=BASE_DIR, env=os.environ.copy())
     last_miniapp_restart_at = time.monotonic()
     log(f"miniapp_server started (PID {miniapp_proc.pid})")
     return miniapp_proc
@@ -212,7 +218,7 @@ def build_tunnel_provider() -> dict[str, object] | None:
             "-o",
             "ExitOnForwardFailure=yes",
             "-R",
-            "80:127.0.0.1:8080",
+            f"80:127.0.0.1:{MINI_APP_PORT}",
             "nokey@localhost.run",
         ],
         "url_pattern": r"https://[\w\-]+\.lhr\.life",
@@ -253,7 +259,7 @@ def tunnel_is_alive(url: str) -> bool:
 
 def server_has_active_requests() -> bool:
     """Check whether miniapp_server is currently handling heavy work."""
-    status, body = _request_status("http://127.0.0.1:8080/api/health", timeout=3)
+    status, body = _request_status(f"{LOCAL_SERVER_BASE_URL}/api/health", timeout=3)
     if status != 200:
         return False
 
@@ -267,7 +273,7 @@ def server_has_active_requests() -> bool:
 
 def local_server_is_alive() -> bool:
     """Check that miniapp_server is reachable on the local port."""
-    status, body = _request_status("http://127.0.0.1:8080/api/health", timeout=3)
+    status, body = _request_status(f"{LOCAL_SERVER_BASE_URL}/api/health", timeout=3)
     if status != 200:
         return False
     try:

@@ -1,13 +1,40 @@
 :root {
   /* Brand primitives */
-  --brand-black-base: #050805;
-  --brand-black-surface: #0b120c;
-  --brand-black-card: #111914;
-  --brand-black-card-hover: #17221b;
-  --brand-black-input: #0e1510;
-  --brand-acid: #c6ff2e;
-  --brand-green-rich: #1f5a31;
-  --brand-green-deep: #143d21;
+  --brand-black-void: #020706;
+  --brand-black-base: #040b09;
+  --brand-black-surface: #08120f;
+  --brand-black-card: #0b1714;
+  --brand-black-card-hover: #10211c;
+  --brand-black-input: #081410;
+  --brand-black-panel: #0d1b17;
+  --brand-accent-core: #12efac;
+  --brand-accent-bright: #15ffcc;
+  --brand-accent-soft: #12e8ac;
+  --brand-accent-shadow: #0bb886;
+  --brand-accent-deep: #0a6f55;
+  --brand-accent-tint: #caffef;
+  --brand-poizon-blue: #4bb7ff;
+  --brand-poizon-blue-bright: #82ddff;
+  --brand-poizon-blue-deep: #1f7cff;
+
+  /* RGB tokens */
+  --white-rgb: 255, 255, 255;
+  --bg-void-rgb: 2, 7, 6;
+  --bg-base-rgb: 4, 11, 9;
+  --bg-surface-rgb: 8, 18, 15;
+  --bg-card-rgb: 11, 23, 20;
+  --bg-panel-rgb: 13, 27, 23;
+  --bg-elevated-rgb: 16, 34, 29;
+  --accent-rgb: 18, 239, 172;
+  --accent-alt-rgb: 21, 255, 204;
+  --accent-soft-rgb: 18, 232, 172;
+  --accent-shadow-rgb: 11, 184, 134;
+  --accent-deep-rgb: 10, 111, 85;
+  --accent-tint-rgb: 202, 255, 239;
+  --poizon-blue-rgb: 75, 183, 255;
+  --poizon-blue-bright-rgb: 130, 221, 255;
+  --poizon-blue-deep-rgb: 31, 124, 255;
+  --text-on-accent-rgb: 3, 21, 16;
 
   /* Background layers */
   --bg-base:        var(--brand-black-base);
@@ -15,25 +42,44 @@
   --bg-card:        var(--brand-black-card);
   --bg-card-hover:  var(--brand-black-card-hover);
   --bg-input:       var(--brand-black-input);
+  --bg-panel:       var(--brand-black-panel);
+  --bg-elevated:    #10221d;
 
   /* Accent */
-  --accent: var(--brand-acid);
-  --accent-dim: #c6ff2e24;
-  --accent-glow: #c6ff2e55;
-  --accent-dark: #76b61e;
+  --accent: var(--brand-accent-core);
+  --accent-bright: var(--brand-accent-bright);
+  --accent-soft: var(--brand-accent-soft);
+  --accent-tint: var(--brand-accent-tint);
+  --accent-dim: rgba(var(--accent-rgb), 0.16);
+  --accent-dim-soft: rgba(var(--accent-alt-rgb), 0.12);
+  --accent-glow: rgba(var(--accent-alt-rgb), 0.36);
+  --accent-glow-strong: rgba(var(--accent-alt-rgb), 0.58);
+  --accent-dark: var(--brand-accent-shadow);
+  --accent-deep: var(--brand-accent-deep);
+  --poizon-blue: var(--brand-poizon-blue);
+  --poizon-blue-bright: var(--brand-poizon-blue-bright);
+  --poizon-blue-deep: var(--brand-poizon-blue-deep);
+  --accent-gradient: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent) 48%, var(--accent-dark) 100%);
+  --accent-gradient-soft: linear-gradient(
+    135deg,
+    rgba(var(--accent-alt-rgb), 0.24) 0%,
+    rgba(var(--accent-rgb), 0.14) 46%,
+    rgba(var(--accent-deep-rgb), 0.26) 100%
+  );
   --admin-accent: var(--accent);
   --admin-accent-dim: var(--accent-dim);
   --admin-accent-glow: var(--accent-glow);
   --admin-accent-dark: var(--accent-dark);
 
   /* Text */
-  --text-primary:   #ffffff;
-  --text-secondary: #888888;
-  --text-muted:     #444444;
+  --text-primary:   #f6fffb;
+  --text-secondary: #93b0a7;
+  --text-muted:     #4c625a;
+  --text-on-accent: #031510;
 
   /* Status colors */
   --status-pending: #F59E0B;
-  --status-progress: #3B82F6;
+  --status-progress: var(--accent-bright);
   --status-complete: #22C55E;
   --color-success:  var(--status-complete);
   --color-warning:  var(--status-pending);
@@ -41,8 +87,9 @@
   --color-info:     var(--status-progress);
 
   /* Border */
-  --border:         #ffffff0d;
-  --border-accent:  #c6ff2e33;
+  --border:         rgba(var(--white-rgb), 0.08);
+  --border-accent:  rgba(var(--accent-alt-rgb), 0.28);
+  --border-strong:  rgba(var(--accent-alt-rgb), 0.4);
 
   /* Radius */
   --radius-sm:   8px;
@@ -79,9 +126,9 @@
   --shell-bottom-action-offset: calc(var(--shell-nav-height) + var(--shell-content-safe-bottom));
 
   /* Transitions */
-  --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-out:    cubic-bezier(0.0, 0.0, 0.2, 1);
+  --ease-out:    cubic-bezier(0.25, 1, 0.5, 1);
   --duration-fast:   150ms;
   --duration-normal: var(--shell-motion-duration);
   --duration-slow:   420ms;

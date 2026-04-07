@@ -24,7 +24,7 @@ from utils.keyboards import (
     kb_confirm_product, kb_add_back,
 )
 from utils.formatters import fmt_result, fmt_client_message, fmt_share_info, fmt_rate_info, fmt_product_card
-from config import CATEGORIES, EXCHANGE_RATE_STALE_SECONDS, PLATFORM_TAOBAO, PLATFORM_1688, PLATFORM_POIZON, ADMIN_USER_ID
+from config import CATEGORIES, EXCHANGE_RATE_STALE_SECONDS, PLATFORM_TAOBAO, PLATFORM_1688, PLATFORM_POIZON, ADMIN_USER_IDS
 
 log = logging.getLogger(__name__)
 
@@ -1592,16 +1592,20 @@ async def handle_report_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE) 
     await query.answer("Отправляем сообщение…")
     user = query.from_user
     url = ctx.user_data.get("last_url", "неизвестно")
-    try:
-        await ctx.bot.send_message(
-            ADMIN_USER_ID,
-            f"🐛 *Сообщение о проблеме*\n"
-            f"От: @{user.username or user.first_name} (ID: `{user.id}`)\n"
-            f"URL: {url}",
-            parse_mode=ParseMode.MARKDOWN,
-        )
-    except Exception as e:
-        log.warning("report_problem send failed: %s", e)
+    notify_text = (
+        f"Problem report\n"
+        f"From: @{user.username or user.first_name} (ID: `{user.id}`)\n"
+        f"URL: {url}"
+    )
+    for admin_user_id in ADMIN_USER_IDS:
+        try:
+            await ctx.bot.send_message(
+                admin_user_id,
+                notify_text,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception as e:
+            log.warning("report_problem send failed for %s: %s", admin_user_id, e)
     await query.message.reply_text(
         "✅ Сообщение отправлено администратору. Разберёмся!"
     )

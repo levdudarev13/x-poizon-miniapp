@@ -24,6 +24,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+BOT_LOCK_NAME = os.getenv("BOT_LOCK_NAME", "buyer_bot.lock")
 
 if not BOT_TOKEN:
     log.error("BOT_TOKEN не задан в .env")
@@ -132,7 +133,7 @@ def main():
 if __name__ == "__main__":
     # Защита от запуска нескольких экземпляров
     import tempfile, atexit
-    _lock_path = os.path.join(tempfile.gettempdir(), "buyer_bot.lock")
+    _lock_path = os.path.join(tempfile.gettempdir(), BOT_LOCK_NAME)
     try:
         _lock_f = open(_lock_path, "x")
         _lock_f.write(str(os.getpid()))

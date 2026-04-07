@@ -1,5 +1,3 @@
-const FALLBACK_VARIANT_PLATFORMS = new Set(['taobao', '1688'])
-
 export function hasSelectableVariantGroups(product) {
   return Array.isArray(product?.variants)
     && product.variants.some((group) => (group?.options || []).length >= 2)
@@ -20,10 +18,6 @@ export function shouldAllowFallbackVariantSelection(product) {
   }
 
   const platform = String(product.platform || '').trim().toLowerCase()
-  if (FALLBACK_VARIANT_PLATFORMS.has(platform)) {
-    return true
-  }
-
   if (platform !== 'poizon') {
     return false
   }

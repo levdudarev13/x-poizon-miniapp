@@ -11,7 +11,7 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 
 import database as db
-from config import ADMIN_USER_ID
+from config import ADMIN_USER_IDS
 
 log = logging.getLogger(__name__)
 
@@ -103,27 +103,29 @@ async def handle_msg_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int
 
     await db.msg_save(user.id, user.username or "", msg_type, text)
 
-    if ADMIN_USER_ID:
+    if ADMIN_USER_IDS:
         uname_display = f"@{user.username}" if user.username else f"{user.first_name} (id: {user.id})"
-        type_label = _TYPE_LABEL.get(msg_type, "Сообщение")
+        type_label = _TYPE_LABEL.get(msg_type, "Message")
         notify_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📨 Перейти к сообщениям", callback_data="msg:admin_list:0")],
+            [InlineKeyboardButton("Open messages", callback_data="msg:admin_list:0")],
         ])
-        try:
-            preview = text[:300] + ("…" if len(text) > 300 else "")
-            await ctx.bot.send_message(
-                chat_id=ADMIN_USER_ID,
-                text=(
-                    f"📩 *Новое сообщение*\n\n"
-                    f"От: {uname_display}\n"
-                    f"Тип: {type_label}\n\n"
-                    f"_{preview}_"
-                ),
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=notify_kb,
-            )
-        except Exception as e:
-            log.warning(f"Не удалось уведомить админа о сообщении: {e}")
+        preview = text[:300] + ("..." if len(text) > 300 else "")
+        notify_text = (
+            f"New user message\n\n"
+            f"From: {uname_display}\n"
+            f"Type: {type_label}\n\n"
+            f"{preview}"
+        )
+        for admin_user_id in ADMIN_USER_IDS:
+            try:
+                await ctx.bot.send_message(
+                    chat_id=admin_user_id,
+                    text=notify_text,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=notify_kb,
+                )
+            except Exception as e:
+                log.warning("Failed to notify admin %s about message: %s", admin_user_id, e)
 
     if msg_type == "problem":
         reply_text = "✅ Ваше сообщение отправлено — проблема решится в ближайшее время."

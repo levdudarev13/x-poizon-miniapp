@@ -9,6 +9,8 @@ import {
   IconExternalLink,
   IconInfo,
   IconOrders,
+  IconPackage,
+  IconSupport,
 } from '../../../components/ui/Icons.jsx'
 import { fetchAdminAvatar } from '../../../api/admin.js'
 import { proxyImageUrl } from '../../../utils/media'
@@ -162,6 +164,9 @@ export function AdminSectionIcon({ type }) {
   if (type === 'orders') return <IconOrders size={22} />
   if (type === 'pricing') return <IconCalculator size={22} />
   if (type === 'carts') return <IconCart size={22} />
+  if (type === 'showcase') return <IconPackage size={22} />
+  if (type === 'faq') return <IconSupport size={22} />
+  if (type === 'about-carousel') return <IconInfo size={22} />
   return <IconAdmin size={22} />
 }
 

@@ -12,6 +12,8 @@ export const SECTIONS = [
   { id: 'orders', label: 'Заявки', icon: 'orders', desc: 'Управление заказами', available: true },
   { id: 'pricing', label: 'Расценки', icon: 'pricing', desc: 'Цены, комиссии и курс', available: true },
   { id: 'carts', label: 'Корзины', icon: 'carts', desc: 'Просмотр корзин клиентов', available: true },
+  { id: 'faq', label: 'FAQ', icon: 'faq', desc: 'Вопросы, ответы и поддержка', available: true },
+  { id: 'showcase', label: 'Витрина', icon: 'showcase', desc: 'Карточки на главном экране', available: true },
 ]
 
 export const PRICING_FIELDS = [
@@ -31,42 +33,6 @@ export const PRICING_FIELDS = [
     inputMode: 'decimal',
     placeholder: '300',
   },
-  {
-    key: 'logistics_rub',
-    label: 'Логистика',
-    hint: 'Фиксированная стоимость логистики по заказу.',
-    suffix: '₽',
-    inputMode: 'decimal',
-    placeholder: '500',
-  },
-  {
-    key: 'insurance_rub',
-    label: 'Страховка',
-    hint: 'Доплата за страховку заказа.',
-    suffix: '₽',
-    inputMode: 'decimal',
-    placeholder: '200',
-  },
-  {
-    key: 'price_per_kg',
-    label: 'Цена за 1 кг',
-    hint: 'Стоимость килограмма международной доставки.',
-    suffix: '₽',
-    inputMode: 'decimal',
-    placeholder: '250',
-  },
-  {
-    key: 'delivery_time',
-    label: 'Срок доставки',
-    hint: 'Текст, который видит пользователь в расчёте.',
-    placeholder: 'до 2 недель',
-  },
-  {
-    key: 'next_shipment_date',
-    label: 'Ближайшая отправка',
-    hint: 'Дата следующей отправки для карточек товаров.',
-    placeholder: '00.00.0000',
-  },
 ]
 
 export const RATE_OVERRIDE_FIELD = {
@@ -77,6 +43,54 @@ export const RATE_OVERRIDE_FIELD = {
   inputMode: 'decimal',
   placeholder: '0',
 }
+
+export const DELIVERY_PRICE_FIELDS = [
+  {
+    key: 'delivery_air_moscow_rub_500g',
+    label: 'Авиа до Москвы за 500 грамм',
+    hint: 'Тариф для экспресс-доставки за каждые 500 грамм.',
+    suffix: '₽',
+    inputMode: 'decimal',
+    placeholder: '1400',
+  },
+  {
+    key: 'delivery_standard_moscow_rub_500g',
+    label: 'Обычная до Москвы за 500 грамм',
+    hint: 'Базовая доставка, которая считается по умолчанию.',
+    suffix: '₽',
+    inputMode: 'decimal',
+    placeholder: '500',
+  },
+  {
+    key: 'delivery_cdek_russia_rub_500g',
+    label: 'СДЭК по России за 500 грамм',
+    hint: 'Добавляется в заявках для городов вне Москвы.',
+    suffix: '₽',
+    inputMode: 'decimal',
+    placeholder: '150',
+  },
+]
+
+export const DELIVERY_TIMING_FIELDS = [
+  {
+    key: 'delivery_air_moscow_days',
+    label: 'Авиа до Москвы',
+    hint: 'Срок экспресс-доставки до Москвы.',
+    placeholder: '5-10 дней',
+  },
+  {
+    key: 'delivery_standard_moscow_days',
+    label: 'Обычная до Москвы',
+    hint: 'Срок доставки по умолчанию для калькулятора и корзины.',
+    placeholder: '15-25 дней',
+  },
+  {
+    key: 'delivery_cdek_russia_days',
+    label: 'СДЭК по России',
+    hint: 'Дополнительный срок после прибытия заказа в Москву.',
+    placeholder: '2-5 дней',
+  },
+]
 
 export const DELIVERY_FIELDS = [
   { key: 'recipient_name', label: 'Получатель' },
@@ -95,7 +109,7 @@ const CART_PLATFORM_NAMES = {
 }
 
 const CART_PLATFORM_COLORS = {
-  poizon: 'var(--accent)',
+  poizon: 'var(--poizon-blue)',
   taobao: '#ff7a45',
   '1688': '#ef5b4d',
 }
@@ -111,11 +125,11 @@ const ADMIN_ORDER_STATUS_META = {
   },
   paid: {
     label: 'Оплачен',
-    color: '#3b82f6',
+    color: '#15ffcc',
   },
   shipped: {
     label: 'Отправлен',
-    color: '#8b5cf6',
+    color: '#12efac',
   },
   arrived: {
     label: 'Доставлено',

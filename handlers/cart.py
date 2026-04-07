@@ -126,8 +126,8 @@ def _plural_items(n: int) -> str:
 async def _notify_admin_order(ctx: ContextTypes.DEFAULT_TYPE, user_id: int,
                               calc_id: int, username: str, added: bool):
     """Отправить администратору уведомление о добавлении/удалении товара из заявки."""
-    from config import ADMIN_USER_ID
-    if not ADMIN_USER_ID:
+    from config import ADMIN_USER_IDS
+    if not ADMIN_USER_IDS:
         return
     try:
         # Берём короткое имя из кеша, иначе из БД
@@ -144,7 +144,11 @@ async def _notify_admin_order(ctx: ContextTypes.DEFAULT_TYPE, user_id: int,
             )
         else:
             text = f"🗑 *Товар убран из заявки*\n{uname} убрал: *{short_name}*"
-        await ctx.bot.send_message(ADMIN_USER_ID, text, parse_mode=ParseMode.MARKDOWN)
+        for admin_user_id in ADMIN_USER_IDS:
+            try:
+                await ctx.bot.send_message(admin_user_id, text, parse_mode=ParseMode.MARKDOWN)
+            except Exception as inner_exc:
+                log.warning("admin order notify failed for %s: %s", admin_user_id, inner_exc)
     except Exception as e:
         log.warning(f"admin order notify failed: {e}")
 

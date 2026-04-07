@@ -23,8 +23,8 @@
   align-items: center;
   justify-content: center;
   color: var(--accent);
-  background: rgba(198, 255, 46, 0.12);
-  border: 1px solid rgba(198, 255, 46, 0.2);
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
 }
 
@@ -131,22 +131,6 @@
   gap: 4px;
 }
 
-.myord-card__product-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.myord-card__product-platform {
-  font-size: 11px;
-  line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--myord-platform-color);
-}
-
 .myord-card__product-name {
   font-size: var(--type-body-size);
   line-height: 1.35;
@@ -211,7 +195,7 @@
   height: 24px;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.18);
-  background: rgba(10, 14, 18, 0.92);
+  background: rgba(var(--bg-panel-rgb), 0.92);
   display: inline-flex;
   align-items: center;
   justify-content: center;

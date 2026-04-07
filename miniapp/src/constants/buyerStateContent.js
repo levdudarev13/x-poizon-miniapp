@@ -139,7 +139,7 @@ export const BUYER_STATE_COPY = {
     resultSuccess: {
       eyebrow: 'Расчёт готов',
       title: 'Итоговая цена рассчитана',
-      body: 'Проверьте состав цены, сравните маркетплейсы и решите, добавлять ли товар в корзину.',
+      body: 'Проверьте состав цены и решите, добавлять ли товар в корзину.',
       iconName: STATE_ICONS.success,
     },
     addToCartSuccess: {

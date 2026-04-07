@@ -29,8 +29,8 @@
   gap: 14px;
   border-color: rgba(255, 255, 255, 0.08);
   background:
-    radial-gradient(circle at top right, rgba(198, 255, 46, 0.1), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.1), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(var(--bg-panel-rgb), 0.2)),
     var(--bg-card);
 }
 
@@ -59,8 +59,8 @@
 .admin-pricing__stat-card {
   border-color: rgba(255, 255, 255, 0.07);
   background:
-    radial-gradient(circle at top right, rgba(198, 255, 46, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(var(--bg-panel-rgb), 0.2)),
     var(--bg-card);
 }
 
@@ -84,14 +84,138 @@
 }
 
 .admin-pricing__dirty {
-  border-color: rgba(198, 255, 46, 0.28);
+  border-color: rgba(var(--accent-rgb), 0.28);
   box-shadow:
-    0 0 0 1px rgba(20, 61, 33, 0.18) inset,
-    0 20px 40px -32px rgba(198, 255, 46, 0.44);
+    0 0 0 1px rgba(var(--accent-deep-rgb), 0.18) inset,
+    0 20px 40px -32px rgba(var(--accent-rgb), 0.44);
 }
 
 .admin-pricing__submit {
   min-width: 132px;
+}
+
+.admin-pricing__disclosure {
+  position: relative;
+  display: grid;
+  gap: 0;
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(var(--bg-panel-rgb), 0.2)),
+    var(--bg-card);
+  overflow: hidden;
+}
+
+.admin-pricing__disclosure-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 18px;
+  text-align: left;
+}
+
+.admin-pricing__disclosure-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-pricing__disclosure-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.admin-pricing__disclosure-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.admin-pricing__disclosure-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 132px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.24), rgba(var(--accent-rgb), 0.1)),
+    rgba(5, 19, 16, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 14px 28px rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.94);
+  transition:
+    transform var(--duration-fast) var(--ease-smooth),
+    border-color var(--duration-fast) var(--ease-smooth),
+    background var(--duration-fast) var(--ease-smooth),
+    box-shadow var(--duration-fast) var(--ease-smooth);
+}
+
+.admin-pricing__disclosure-button--open {
+  border-color: rgba(var(--accent-rgb), 0.28);
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.3), rgba(var(--accent-rgb), 0.14)),
+    rgba(5, 19, 16, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 16px 30px rgba(0, 0, 0, 0.22);
+}
+
+.admin-pricing__disclosure-button-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-pricing__disclosure-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  transition:
+    transform var(--duration-fast) var(--ease-smooth),
+    border-color var(--duration-fast) var(--ease-smooth),
+    background var(--duration-fast) var(--ease-smooth);
+}
+
+.admin-pricing__disclosure-chevron--open {
+  transform: rotate(180deg);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.admin-pricing__disclosure-body {
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  padding: 0 18px 18px;
+}
+
+.admin-pricing__disclosure-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-pricing__disclosure-note {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 @media (min-width: 640px) {
@@ -114,5 +238,9 @@
 
   .admin-pricing__submit {
     min-width: 148px;
+  }
+
+  .admin-pricing__disclosure-toggle {
+    align-items: center;
   }
 }

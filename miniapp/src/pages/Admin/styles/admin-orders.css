@@ -2,8 +2,8 @@
   margin-bottom: var(--space-md);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background:
-    radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.18)),
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(var(--bg-panel-rgb), 0.2)),
     var(--bg-card);
 }
 
@@ -161,8 +161,8 @@
   gap: 14px;
   border-color: rgba(255, 255, 255, 0.07);
   background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(15, 23, 42, 0.22)),
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(var(--bg-panel-rgb), 0.24)),
     var(--bg-card);
 }
 
@@ -447,11 +447,11 @@
 }
 
 .admin-order-item__action--shipped {
-  --order-action-rgb: 59, 130, 246;
+  --order-action-rgb: var(--accent-rgb);
 }
 
 .admin-order-item__action--shipped-done {
-  --order-action-rgb: 14, 165, 233;
+  --order-action-rgb: var(--accent-alt-rgb);
 }
 
 .admin-order-item__action--arrived {
@@ -463,19 +463,19 @@
 }
 
 .admin-order-item__action--tracking {
-  --order-action-rgb: 168, 85, 247;
+  --order-action-rgb: var(--accent-shadow-rgb);
 }
 
 .admin-order-item__action--tracking-active {
-  --order-action-rgb: 139, 92, 246;
+  --order-action-rgb: var(--accent-rgb);
 }
 
 .admin-order-item__action--item-number {
-  --order-action-rgb: 56, 189, 248;
+  --order-action-rgb: var(--accent-soft-rgb);
 }
 
 .admin-order-item__action--item-number-active {
-  --order-action-rgb: 45, 212, 191;
+  --order-action-rgb: var(--accent-shadow-rgb);
 }
 
 .admin-order-item__action--danger {

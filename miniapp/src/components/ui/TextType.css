@@ -1,0 +1,25 @@
+.text-type {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.text-type__content {
+  display: inline-block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-type__cursor {
+  display: inline-block;
+  flex-shrink: 0;
+  margin-left: 1px;
+  will-change: opacity;
+}
+
+.text-type__cursor--hidden {
+  opacity: 0 !important;
+}

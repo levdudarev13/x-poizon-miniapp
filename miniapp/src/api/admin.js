@@ -88,6 +88,72 @@ export function updateAdminShowcase({ initData = '', links = [] } = {}) {
   })
 }
 
+export function fetchAdminAboutCarousel({ initData = '' } = {}) {
+  return adminRequest('/api/admin/about-carousel', { initData })
+}
+
+export function uploadAdminAboutCarouselImage({
+  initData = '',
+  slot = 0,
+  imageData = '',
+  imageAlt = '',
+  insert = false,
+} = {}) {
+  return adminRequest('/api/admin/about-carousel/upload', {
+    initData,
+    body: {
+      slot,
+      image_data: imageData,
+      image_alt: imageAlt,
+      insert,
+    },
+  })
+}
+
+export function deleteAdminAboutCarouselSlide({ initData = '', slot = 0 } = {}) {
+  return adminRequest('/api/admin/about-carousel/delete', {
+    initData,
+    body: {
+      slot,
+    },
+  })
+}
+
+export function fetchAdminBanners({ initData = '' } = {}) {
+  return adminRequest('/api/admin/banners', { initData })
+}
+
+export function saveAdminBanner({
+  initData = '',
+  banner = null,
+} = {}) {
+  return adminRequest('/api/admin/banners/save', {
+    initData,
+    body: banner && typeof banner === 'object' ? banner : {},
+  })
+}
+
+export function deleteAdminBanner({ initData = '', id = 0 } = {}) {
+  return adminRequest('/api/admin/banners/delete', {
+    initData,
+    body: { id },
+  })
+}
+
+export function uploadAdminBannerImage({
+  initData = '',
+  imageData = '',
+  assetKind = 'cover',
+} = {}) {
+  return adminRequest('/api/admin/banners/upload', {
+    initData,
+    body: {
+      image_data: imageData,
+      asset_kind: assetKind,
+    },
+  })
+}
+
 export function fetchAdminMessages({ initData = '', page = 1, pageSize = 10 } = {}) {
   return adminRequest('/api/admin/messages', {
     initData,

@@ -20,7 +20,9 @@ export default function PriceBreakdown({
         <div key={getRowKey(row, index)} className="ui-breakdown__row">
           <div className="ui-breakdown__left">
             <span className="ui-breakdown__label">{repairMojibakeText(row.label)}</span>
-            {row.note ? <span className="ui-breakdown__note">{repairMojibakeText(row.note)}</span> : null}
+            {row.note && (typeof row.showNote === 'boolean' ? row.showNote : index === 0) ? (
+              <span className="ui-breakdown__note">{repairMojibakeText(row.note)}</span>
+            ) : null}
           </div>
           <span className="ui-breakdown__amount">{row.amount}</span>
         </div>

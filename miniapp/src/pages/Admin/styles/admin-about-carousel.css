@@ -1,0 +1,274 @@
+.admin-about-carousel__stack {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-about-carousel__topbar {
+  align-items: center;
+}
+
+.admin-about-carousel__title-wrap {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+}
+
+.admin-about-carousel__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+
+.admin-about-carousel__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-about-carousel__item,
+.admin-about-carousel__adder {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 20px;
+}
+
+.admin-about-carousel__thumb,
+.admin-about-carousel__adder-frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border-radius: 18px;
+}
+
+.admin-about-carousel__thumb {
+  background:
+    linear-gradient(180deg, rgba(10, 22, 24, 0.98) 0%, rgba(11, 9, 18, 0.98) 100%);
+  border: 1px solid rgba(111, 147, 138, 0.18);
+}
+
+.admin-about-carousel__thumb-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-about-carousel__slot-badge,
+.admin-about-carousel__thumb-overlay {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.admin-about-carousel__slot-badge {
+  top: 10px;
+  left: 10px;
+  min-height: 28px;
+  padding: 0 10px;
+  background: rgba(6, 17, 18, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__thumb-overlay {
+  inset: auto 10px 10px 10px;
+  min-height: 30px;
+  background: rgba(6, 17, 18, 0.72);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-about-carousel__item-label {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-about-carousel__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.admin-about-carousel__icon-button--danger {
+  border-color: rgba(248, 113, 113, 0.16);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fecaca;
+}
+
+.admin-about-carousel__icon-button:disabled,
+.admin-about-carousel__adder:disabled {
+  opacity: 0.56;
+}
+
+.admin-about-carousel__adder {
+  align-content: stretch;
+}
+
+.admin-about-carousel__adder-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-about-carousel__position-field {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-about-carousel__position-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__position-input {
+  width: 100%;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__insert-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-about-carousel__adder-frame {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 18px;
+  border: 1px dashed rgba(var(--accent-rgb), 0.24);
+  background:
+    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.12), transparent 52%),
+    rgba(255, 255, 255, 0.02);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.admin-about-carousel__adder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+}
+
+.admin-about-carousel__adder-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-about-carousel__adder-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-about-carousel__input {
+  display: none;
+}
+
+@media (max-width: 420px) {
+  .admin-about-carousel__topbar {
+    gap: 10px;
+  }
+
+  .admin-about-carousel__title {
+    font-size: 19px;
+  }
+
+  .admin-about-carousel__back {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+
+  .admin-about-carousel__grid {
+    gap: 12px;
+  }
+
+  .admin-about-carousel__item,
+  .admin-about-carousel__adder {
+    padding: 10px;
+  }
+
+  .admin-about-carousel__adder-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-about-carousel__insert-button {
+    width: 100%;
+  }
+}

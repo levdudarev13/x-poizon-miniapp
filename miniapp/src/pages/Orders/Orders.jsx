@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { bootstrapWithInitData } from '../../api/admin.js'
 import { fetchDeliveryProfile } from '../../api/delivery'
 import {
   IconExternalLink,
+  IconPackage,
+  IconQuestion,
   IconStateAlert,
   IconStateEmpty,
   IconStateRetry,
@@ -15,8 +18,15 @@ import { BUYER_MOTION, BUYER_PRESS_SCALE } from '../../constants/buyerMotion'
 import { formatBuyerRub } from '../../constants/buyerNumbers'
 import ProductThumb from '../../components/ui/ProductThumb'
 import { BUYER_STATE_COPY } from '../../constants/buyerStateContent'
-import { PLATFORM_COLORS, PLATFORM_NAMES } from '../../constants/platformMeta'
 import { useTelegram } from '../../hooks/useTelegram'
+import {
+  EXPRESS_DELIVERY_TYPE,
+  STANDARD_DELIVERY_TYPE,
+  calculateOrderItemPreview,
+  getDeliverySettings,
+  isMoscowDeliveryCity,
+  normalizeDeliveryType,
+} from '../../utils/deliveryPricing'
 import { parseRepairJson, repairMojibakeDeep } from '../../utils/text'
 import './Orders.css'
 
@@ -26,6 +36,13 @@ const ORDER_STATE_ICONS = {
   IconStateRetry,
   IconStateSuccess,
 }
+const ORDER_GUIDE_SEQUENCE_STAGE = {
+  intro: 0,
+  delivery: 1,
+  deliveryCopy: 2,
+  footer: 3,
+  popover: 4,
+}
 
 function createInitialDeliveryStatus() {
   return {
@@ -33,6 +50,43 @@ function createInitialDeliveryStatus() {
     deliveryData: null,
     updatedAt: '',
   }
+}
+
+function createInitialPricingState() {
+  return {
+    adminSettings: {},
+    deliveryInfo: null,
+    rateRubPerCny: 0,
+  }
+}
+
+function normalizeGuidePreviewDeliveryStatus(payload = {}) {
+  return {
+    isComplete: typeof payload?.isComplete === 'boolean' ? payload.isComplete : true,
+    deliveryData: payload?.deliveryData && typeof payload.deliveryData === 'object'
+      ? payload.deliveryData
+      : null,
+    updatedAt: String(payload?.updatedAt || ''),
+  }
+}
+
+function normalizeGuidePreviewPricingState(payload = {}) {
+  return {
+    adminSettings: payload?.adminSettings && typeof payload.adminSettings === 'object'
+      ? payload.adminSettings
+      : {},
+    deliveryInfo: payload?.deliveryInfo && typeof payload.deliveryInfo === 'object'
+      ? payload.deliveryInfo
+      : null,
+    rateRubPerCny: Number(payload?.rateRubPerCny || 0),
+  }
+}
+
+function getOrderGuideFocusKind(stage = 0) {
+  if (stage >= ORDER_GUIDE_SEQUENCE_STAGE.popover) return 'popover'
+  if (stage >= ORDER_GUIDE_SEQUENCE_STAGE.footer) return 'footer'
+  if (stage >= ORDER_GUIDE_SEQUENCE_STAGE.delivery) return 'delivery'
+  return ''
 }
 
 function normalizeDeliveryStatus(payload = {}) {
@@ -48,6 +102,14 @@ function normalizeDeliveryStatus(payload = {}) {
   }
 }
 
+function normalizePricingState(payload = {}) {
+  return {
+    adminSettings: payload?.admin_settings || {},
+    deliveryInfo: payload?.delivery_info || null,
+    rateRubPerCny: Number(payload?.rate?.cny_rub || 0),
+  }
+}
+
 async function apiFetch(path, options = {}) {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -60,18 +122,6 @@ async function apiFetch(path, options = {}) {
   }
 
   return data
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-
-  try {
-    const date = new Date(dateStr)
-    const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
-    return `${date.getDate()} ${months[date.getMonth()]}`
-  } catch {
-    return ''
-  }
 }
 
 function pluralItems(count) {
@@ -94,6 +144,28 @@ function getImageUrl(calcJson) {
 
   const data = parseRepairJson(calcJson)
   return data?.product?.image_url || data?.image_url || ''
+}
+
+function getOrderPreviewSeed(item) {
+  const calcPayload = parseRepairJson(item?.calc_json)
+  const product = calcPayload?.product || {}
+
+  return {
+    priceCny: item?.price_cny ?? product?.price_cny ?? 0,
+    weightKg: item?.weight_kg ?? product?.weight_kg ?? null,
+    weightEstimated: Boolean(item?.weight_estimated ?? product?.weight_estimated),
+  }
+}
+
+function formatMetricValue(value, { maxFractionDigits = 2 } = {}) {
+  const numeric = Number(value || 0)
+  if (!Number.isFinite(numeric)) return '0'
+
+  const hasFraction = Math.abs(numeric - Math.trunc(numeric)) > 0.001
+  return new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: hasFraction ? Math.min(2, maxFractionDigits) : 0,
+    maximumFractionDigits: maxFractionDigits,
+  }).format(numeric)
 }
 
 function ConfirmModal({ onConfirm, onCancel, loading }) {
@@ -200,8 +272,13 @@ function OrdersModalPortal({ children }) {
   return createPortal(children, document.body)
 }
 
-export default function Orders({ active, onRequestOpenProfileDelivery }) {
-  const { userId, haptic } = useTelegram()
+export default function Orders({
+  active,
+  onRequestOpenProfileDelivery,
+  guidePreview = null,
+  guidePreviewSequenceStage = ORDER_GUIDE_SEQUENCE_STAGE.intro,
+}) {
+  const { userId, initData, haptic } = useTelegram()
   const prefersReducedMotion = useReducedMotion()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -211,9 +288,55 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
   const [showDeliveryBlocker, setShowDeliveryBlocker] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [deliveryInfoOpen, setDeliveryInfoOpen] = useState(false)
+  const [priceInfoOpen, setPriceInfoOpen] = useState(false)
   const [deliveryStatus, setDeliveryStatus] = useState(() => createInitialDeliveryStatus())
+  const [pricingState, setPricingState] = useState(() => createInitialPricingState())
+  const [deliveryType, setDeliveryType] = useState(STANDARD_DELIVERY_TYPE)
+  const deliveryInfoRef = useRef(null)
+  const priceInfoRef = useRef(null)
+  const isGuidePreview = Boolean(guidePreview)
+  const guidePreviewItems = useMemo(() => (
+    isGuidePreview && Array.isArray(guidePreview?.items)
+      ? guidePreview.items.slice(0, 1)
+      : []
+  ), [guidePreview?.items, isGuidePreview])
+  const previewDeliveryStatus = useMemo(() => (
+    isGuidePreview
+      ? normalizeGuidePreviewDeliveryStatus(guidePreview?.deliveryStatus)
+      : null
+  ), [guidePreview?.deliveryStatus, isGuidePreview])
+  const previewPricingState = useMemo(() => (
+    isGuidePreview
+      ? normalizeGuidePreviewPricingState(guidePreview?.pricingState)
+      : null
+  ), [guidePreview?.pricingState, isGuidePreview])
+  const guidePreviewFocusKind = isGuidePreview ? getOrderGuideFocusKind(guidePreviewSequenceStage) : ''
+  const resolvedItems = isGuidePreview ? guidePreviewItems : items
+  const resolvedLoading = isGuidePreview ? false : loading
+  const resolvedError = isGuidePreview ? null : error
+  const resolvedSubmitSuccess = isGuidePreview ? false : submitSuccess
+  const resolvedDeliveryStatus = isGuidePreview ? previewDeliveryStatus : deliveryStatus
+  const resolvedPricingState = isGuidePreview ? previewPricingState : pricingState
+  const resolvedDeliveryInfoOpen = isGuidePreview ? false : deliveryInfoOpen
+  const resolvedPriceInfoOpen = isGuidePreview ? false : priceInfoOpen
+  const resolvedDeliveryType = isGuidePreview
+    ? (
+      guidePreviewSequenceStage >= ORDER_GUIDE_SEQUENCE_STAGE.delivery
+        ? EXPRESS_DELIVERY_TYPE
+        : normalizeDeliveryType(guidePreview?.deliveryType)
+    )
+    : normalizeDeliveryType(deliveryType)
 
   const fetchOrders = useCallback(async () => {
+    if (isGuidePreview) {
+      setItems(guidePreviewItems)
+      setLoading(false)
+      setError(null)
+      setSubmitSuccess(false)
+      return guidePreviewItems
+    }
+
     if (!userId) {
       setError(null)
       setSubmitSuccess(false)
@@ -236,9 +359,13 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [guidePreviewItems, isGuidePreview, userId])
 
   const refreshDeliveryStatus = useCallback(async () => {
+    if (isGuidePreview) {
+      return previewDeliveryStatus
+    }
+
     if (!userId) {
       const emptyStatus = createInitialDeliveryStatus()
       setDeliveryStatus(emptyStatus)
@@ -253,18 +380,44 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
     } catch {
       return null
     }
-  }, [userId])
+  }, [isGuidePreview, previewDeliveryStatus, userId])
+
+  const refreshPricingState = useCallback(async () => {
+    if (isGuidePreview) {
+      return previewPricingState
+    }
+
+    if (!userId) {
+      const emptyState = createInitialPricingState()
+      setPricingState(emptyState)
+      return emptyState
+    }
+
+    try {
+      const payload = await bootstrapWithInitData({ userId, initData })
+      const nextState = normalizePricingState(payload)
+      setPricingState(nextState)
+      return nextState
+    } catch {
+      return null
+    }
+  }, [initData, isGuidePreview, previewPricingState, userId])
 
   useEffect(() => {
+    if (!active && !isGuidePreview) {
+      return
+    }
+
     fetchOrders()
-  }, [fetchOrders])
+  }, [active, fetchOrders, isGuidePreview])
 
   useEffect(() => {
     if (active) {
       fetchOrders()
       refreshDeliveryStatus()
+      refreshPricingState()
     }
-  }, [active, fetchOrders, refreshDeliveryStatus])
+  }, [active, fetchOrders, refreshDeliveryStatus, refreshPricingState])
 
   useEffect(() => {
     const blockShellSwipe = active && (showConfirm || showDeliveryBlocker)
@@ -284,7 +437,44 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
     setShowDeliveryBlocker(true)
   }, [deliveryStatus.isComplete, showConfirm])
 
+  useEffect(() => {
+    if (isGuidePreview) {
+      return
+    }
+
+    if (active) {
+      return
+    }
+
+    setDeliveryInfoOpen(false)
+    setPriceInfoOpen(false)
+  }, [active, isGuidePreview])
+
+  useEffect(() => {
+    if (!deliveryInfoOpen && !priceInfoOpen) {
+      return undefined
+    }
+
+    const handlePointerDown = (event) => {
+      if (deliveryInfoRef.current?.contains(event.target) || priceInfoRef.current?.contains(event.target)) {
+        return
+      }
+
+      setDeliveryInfoOpen(false)
+      setPriceInfoOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [deliveryInfoOpen, priceInfoOpen])
+
   const handleDelete = async (calcId) => {
+    if (isGuidePreview) {
+      return
+    }
+
     haptic?.('medium')
     setDeleteLoading((current) => ({ ...current, [calcId]: true }))
 
@@ -303,41 +493,72 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
   }
 
   const handleSubmitClick = useCallback(() => {
-    if (!items.length) {
+    if (isGuidePreview || !resolvedItems.length) {
       return
     }
 
     haptic?.('medium')
     setSubmitSuccess(false)
 
-    if (deliveryStatus.isComplete === false) {
+    if (resolvedDeliveryStatus.isComplete === false) {
       setShowConfirm(false)
       setShowDeliveryBlocker(true)
       return
     }
 
-    if (deliveryStatus.isComplete === null) {
+    if (resolvedDeliveryStatus.isComplete === null) {
       void refreshDeliveryStatus()
     }
 
     setShowDeliveryBlocker(false)
     setShowConfirm(true)
-  }, [deliveryStatus, haptic, items.length, refreshDeliveryStatus])
+  }, [haptic, isGuidePreview, refreshDeliveryStatus, resolvedDeliveryStatus, resolvedItems.length])
 
   const handleOpenDelivery = useCallback(() => {
+    if (isGuidePreview) {
+      return
+    }
+
     setShowDeliveryBlocker(false)
     setShowConfirm(false)
     haptic?.('light')
     onRequestOpenProfileDelivery?.()
-  }, [haptic, onRequestOpenProfileDelivery])
+  }, [haptic, isGuidePreview, onRequestOpenProfileDelivery])
+
+  const handleToggleDeliveryInfo = useCallback(() => {
+    if (isGuidePreview) {
+      return
+    }
+
+    setDeliveryInfoOpen((current) => !current)
+    setPriceInfoOpen(false)
+    haptic?.('light')
+  }, [haptic, isGuidePreview])
+
+  const handleTogglePriceInfo = useCallback(() => {
+    if (isGuidePreview) {
+      return
+    }
+
+    setPriceInfoOpen((current) => !current)
+    setDeliveryInfoOpen(false)
+    haptic?.('light')
+  }, [haptic, isGuidePreview])
 
   const handleConfirmSubmit = async () => {
+    if (isGuidePreview) {
+      return
+    }
+
     setSubmitLoading(true)
 
     try {
       await apiFetch('/api/cart/submit-order', {
         method: 'POST',
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify({
+          user_id: userId,
+          delivery_type: normalizeDeliveryType(deliveryType),
+        }),
       })
       setSubmitSuccess(true)
       setItems([])
@@ -359,17 +580,85 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
     }
   }
 
-  const total = items.reduce((sum, item) => sum + (item.subtotal_rub || item.total_with_margin_rub || 0), 0)
-  const deliveryCueVisible = deliveryStatus.isComplete === false
+  const normalizedDeliveryType = resolvedDeliveryType
+  const deliveryCity = String(resolvedDeliveryStatus.deliveryData?.city || '').trim()
+  const settings = getDeliverySettings(resolvedPricingState.adminSettings || {})
+  const deliveryInfo = {
+    standard_days: resolvedPricingState.deliveryInfo?.standard_days || settings.standardDays,
+    express_days: resolvedPricingState.deliveryInfo?.express_days || settings.expressDays,
+    cdek_days: resolvedPricingState.deliveryInfo?.cdek_days || settings.cdekDays,
+  }
+  const pricingReady = resolvedPricingState.rateRubPerCny > 0
+  const regionalDelivery = deliveryCity ? !isMoscowDeliveryCity(deliveryCity) : false
+  const activeDeliveryTitle = normalizedDeliveryType === EXPRESS_DELIVERY_TYPE ? 'Экспресс доставка' : 'Обычная доставка'
+  const activeDeliveryDays = normalizedDeliveryType === EXPRESS_DELIVERY_TYPE ? deliveryInfo.express_days : deliveryInfo.standard_days
+  const deliveryDetails = [
+    'В стоимость доставки входят облицовка и страховка.',
+    'Доставка оплачивается при получении.',
+  ]
+
+  const previewItems = resolvedItems.map((item) => {
+    const seed = getOrderPreviewSeed(item)
+    const preview = pricingReady
+      ? calculateOrderItemPreview({
+        priceCny: seed.priceCny,
+        weightKg: seed.weightKg,
+        weightEstimated: seed.weightEstimated,
+        adminSettings: resolvedPricingState.adminSettings,
+        rate: resolvedPricingState.rateRubPerCny,
+        deliveryType: normalizedDeliveryType,
+        city: deliveryCity,
+      })
+      : null
+
+    return {
+      item,
+      seed,
+      preview,
+      displayPrice: preview?.subtotalRub || item.subtotal_rub || item.total_with_margin_rub || 0,
+    }
+  })
+
+  const total = previewItems.reduce((sum, entry) => sum + entry.displayPrice, 0)
+  const breakdownReady = pricingReady && previewItems.length > 0 && previewItems.every(({ preview }) => Boolean(preview))
+  const priceBreakdownTotals = previewItems.reduce((totals, { seed, preview }) => {
+    if (!preview) {
+      return totals
+    }
+
+    return {
+      goodsCny: totals.goodsCny + Number(seed.priceCny || 0),
+      goodsRub: totals.goodsRub + Number(preview.goodsRub || 0),
+      commissionRub: totals.commissionRub + Number(preview.commissionRub || 0),
+      deliveryToMoscowRub: totals.deliveryToMoscowRub + Number(preview.deliveryToMoscowRub || 0),
+      cdekRub: totals.cdekRub + Number(preview.cdekRub || 0),
+    }
+  }, {
+    goodsCny: 0,
+    goodsRub: 0,
+    commissionRub: 0,
+    deliveryToMoscowRub: 0,
+    cdekRub: 0,
+  })
+  const totalDeliveryRub = priceBreakdownTotals.deliveryToMoscowRub + priceBreakdownTotals.cdekRub
+  const goodsRateNote = breakdownReady
+    ? `${formatMetricValue(priceBreakdownTotals.goodsCny)} ¥ × ${formatMetricValue(resolvedPricingState.rateRubPerCny)} ₽/¥`
+    : 'Состав появится после загрузки курса.'
+  const deliveryRateNote = priceBreakdownTotals.cdekRub > 0
+    ? 'До Москвы + СДЭК по России'
+    : normalizedDeliveryType === EXPRESS_DELIVERY_TYPE
+      ? 'Экспресс до Москвы'
+      : 'Обычная до Москвы'
+  const deliveryCueVisible = resolvedDeliveryStatus.isComplete === false
 
   return (
-    <div className="page orders-page buyer-page buyer-page--orders">
+    <div className={`page orders-page buyer-page buyer-page--orders${isGuidePreview ? ' orders-page--guide-preview' : ''}`}>
       <div className="page-header">
         <h1>Заявки</h1>
-        <p className="ord-overview text-secondary">{pluralItems(items.length)}</p>
+        <p className="ord-overview text-secondary">{pluralItems(resolvedItems.length)}</p>
       </div>
 
-      {loading ? (
+      {resolvedLoading ? (
         <div className="page-content ord-page__state">
           <StateSurface
             tone="progress"
@@ -380,7 +669,7 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
             icon={getOrdersIcon(BUYER_STATE_COPY.orders.loading.iconName)}
           />
         </div>
-      ) : error ? (
+      ) : resolvedError ? (
         <div className="page-content ord-page__state">
           <StateSurface
             tone="error"
@@ -392,7 +681,7 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
             icon={getOrdersIcon(BUYER_STATE_COPY.orders.fetchError.iconName)}
           />
         </div>
-      ) : submitSuccess ? (
+      ) : resolvedSubmitSuccess ? (
         <div className="page-content ord-page__state">
           <StateSurface
             tone="complete"
@@ -402,7 +691,7 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
             icon={getOrdersIcon(BUYER_STATE_COPY.orders.submitSuccess.iconName)}
           />
         </div>
-      ) : !items.length ? (
+      ) : !resolvedItems.length ? (
         <div className="page-content ord-page__state">
           <StateSurface
             eyebrow={BUYER_STATE_COPY.orders.empty.eyebrow}
@@ -416,11 +705,7 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
           <div className="page-content">
             <div className="orders-list">
               <AnimatePresence initial={false}>
-                {items.map((item, index) => {
-                  const platformColor = PLATFORM_COLORS[item.platform] || '#555555'
-                  const platformLabel = PLATFORM_NAMES[item.platform] || item.platform || 'Товар'
-                  const price = item.subtotal_rub || item.total_with_margin_rub || 0
-                  const date = formatDate(item.order_added_at)
+                {previewItems.map(({ item, displayPrice }, index) => {
                   const imageUrl = getImageUrl(item.calc_json)
                   const isDeleting = Boolean(deleteLoading[item.id])
 
@@ -429,7 +714,6 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
                       key={item.id}
                       layout
                       className="ord-card card"
-                      style={{ '--ord-platform-color': platformColor }}
                       initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: prefersReducedMotion ? 0 : -48 }}
@@ -442,20 +726,15 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
                         <ProductThumb
                           src={imageUrl}
                           alt=""
-                          fallbackLabel={platformLabel}
+                          fallbackLabel={item.short_name || item.name || 'Товар'}
                           className="ord-card__thumb"
-                          size="sm"
+                          size="md"
                         />
                       </div>
 
                       <div className="ord-card__body">
                         <p className="ord-card__name">{item.short_name || item.name || 'Товар'}</p>
-                        <p className="ord-card__price">{formatBuyerRub(price)}</p>
-
-                        <div className="ord-card__meta">
-                          <span className="ui-pill ord-card__platform">{platformLabel}</span>
-                          {date ? <span className="ui-pill ord-card__date">{date}</span> : null}
-                        </div>
+                        <p className="ord-card__price">{formatBuyerRub(displayPrice)}</p>
                       </div>
 
                       <button
@@ -477,31 +756,172 @@ export default function Orders({ active, onRequestOpenProfileDelivery }) {
               </AnimatePresence>
             </div>
 
-            <div className="ord-footer-shell">
-              <div className="ord-footer ui-surface-panel">
-                <div className="ord-footer__info">
-                  <span className="ord-footer__label">Итого</span>
-                  <span className="ord-footer__sum">{formatBuyerRub(total)}</span>
-                </div>
+            <section
+              className="ord-delivery card"
+              data-order-guide-step-eight-target={isGuidePreview ? 'delivery' : undefined}
+            >
+                  <div className="ord-delivery__primary">
+                    <div className="ord-delivery__icon" aria-hidden="true">
+                      <IconPackage size={22} />
+                    </div>
+                    <div className="ord-delivery__copy">
+                      <div className="ord-delivery__title-row" ref={deliveryInfoRef}>
+                        <h2 className="ord-delivery__title">{activeDeliveryTitle}</h2>
+                        <>
+                          <button
+                            type="button"
+                            className={`ord-delivery__info-button pressable${resolvedDeliveryInfoOpen ? ' ord-delivery__info-button--open' : ''}`}
+                            aria-label={resolvedDeliveryInfoOpen ? 'Скрыть детали доставки' : 'Показать детали доставки'}
+                            aria-expanded={resolvedDeliveryInfoOpen}
+                            aria-controls="orders-delivery-details"
+                            onClick={handleToggleDeliveryInfo}
+                          >
+                            <IconQuestion size={14} />
+                          </button>
+                          <AnimatePresence initial={false}>
+                            {resolvedDeliveryInfoOpen ? (
+                              <motion.div
+                                id="orders-delivery-details"
+                                className="ord-delivery__popover"
+                                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
+                                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
+                                transition={prefersReducedMotion ? BUYER_MOTION.quick : BUYER_MOTION.standard}
+                              >
+                                {deliveryDetails.map((note, index) => (
+                                  <p key={`${note}-${index}`}>{note}</p>
+                                ))}
+                              </motion.div>
+                            ) : null}
+                          </AnimatePresence>
+                        </>
+                      </div>
+                      <p className="ord-delivery__subtitle">{activeDeliveryDays || 'Срок уточняется'}</p>
+                    </div>
+                  </div>
 
-                <button
-                  type="button"
-                  className="ord-footer__submit pressable"
-                  onClick={handleSubmitClick}
-                  disabled={!items.length}
-                >
-                  <span className="ord-footer__submit-content">
-                    <span
-                      className={`ord-footer__submit-icon${deliveryCueVisible ? ' ord-footer__submit-icon--alert' : ''}`}
-                      aria-hidden="true"
+                  <div className="ord-delivery__divider" />
+
+                  <div className="ord-delivery__toggle-row">
+                    <div className="ord-delivery__toggle-copy">
+                      <span className="ord-delivery__toggle-label">Экспресс доставка</span>
+                      <span className="ord-delivery__toggle-hint">{deliveryInfo.express_days || 'Срок уточняется'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`ord-switch pressable${normalizedDeliveryType === EXPRESS_DELIVERY_TYPE ? ' ord-switch--active' : ''}`}
+                      role="switch"
+                      aria-checked={normalizedDeliveryType === EXPRESS_DELIVERY_TYPE}
+                      aria-label="Включить экспресс доставку"
+                      onClick={() => {
+                        setDeliveryType((current) => (
+                          normalizeDeliveryType(current) === EXPRESS_DELIVERY_TYPE
+                            ? STANDARD_DELIVERY_TYPE
+                            : EXPRESS_DELIVERY_TYPE
+                        ))
+                        haptic?.('light')
+                      }}
                     >
-                      {deliveryCueVisible ? <IconStateAlert size={18} /> : <IconExternalLink size={18} />}
+                      <span className="ord-switch__thumb" />
+                    </button>
+                  </div>
+
+                  {regionalDelivery ? (
+                    <div className="ord-delivery__route">
+                      <span className="ord-delivery__route-label">СДЭК по России</span>
+                      <span className="ord-delivery__route-value">{deliveryInfo.cdek_days || 'Срок уточняется'}</span>
+                    </div>
+                  ) : null}
+
+                </section>
+
+            <div className="ord-footer-shell">
+                <div
+                  className="ord-footer ui-surface-panel"
+                  data-order-guide-step-eight-target={isGuidePreview ? 'footer' : undefined}
+                >
+                  <div className="ord-footer__info">
+                    <div className="ord-footer__headline" ref={priceInfoRef}>
+                      <span className="ord-footer__label">Итого</span>
+                      <button
+                        type="button"
+                        className={`ord-delivery__info-button ord-footer__info-button pressable${resolvedPriceInfoOpen ? ' ord-delivery__info-button--open ord-footer__info-button--open' : ''}${guidePreviewFocusKind === 'popover' ? ' ord-footer__info-button--guide-preview-press' : ''}`}
+                        aria-label={resolvedPriceInfoOpen ? 'Скрыть состав цены' : 'Показать состав цены'}
+                        aria-expanded={resolvedPriceInfoOpen}
+                        aria-controls="orders-price-details"
+                        onClick={handleTogglePriceInfo}
+                      >
+                        <IconQuestion size={14} />
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {resolvedPriceInfoOpen ? (
+                          <motion.div
+                            id="orders-price-details"
+                            className="ord-delivery__popover ord-footer__popover"
+                            data-order-guide-step-eight-target={isGuidePreview ? 'popover' : undefined}
+                            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
+                            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
+                            transition={prefersReducedMotion ? BUYER_MOTION.quick : BUYER_MOTION.standard}
+                          >
+                            {breakdownReady ? (
+                              <div className="ord-footer__breakdown">
+                                <div className="ord-footer__breakdown-row">
+                                  <div className="ord-footer__breakdown-copy">
+                                    <span className="ord-footer__breakdown-label">Товар</span>
+                                    <span className="ord-footer__breakdown-note">{goodsRateNote}</span>
+                                  </div>
+                                  <span className="ord-footer__breakdown-value">{formatBuyerRub(priceBreakdownTotals.goodsRub)}</span>
+                                </div>
+                                <div className="ord-footer__breakdown-row">
+                                  <div className="ord-footer__breakdown-copy">
+                                    <span className="ord-footer__breakdown-label">Комиссия</span>
+                                  </div>
+                                  <span className="ord-footer__breakdown-value">{formatBuyerRub(priceBreakdownTotals.commissionRub)}</span>
+                                </div>
+                                <div className="ord-footer__breakdown-row">
+                                  <div className="ord-footer__breakdown-copy">
+                                    <span className="ord-footer__breakdown-label">Доставка</span>
+                                    <span className="ord-footer__breakdown-note">{deliveryRateNote}</span>
+                                  </div>
+                                  <span className="ord-footer__breakdown-value">{formatBuyerRub(totalDeliveryRub)}</span>
+                                </div>
+                                <div className="ord-footer__breakdown-divider" />
+                                <div className="ord-footer__breakdown-row ord-footer__breakdown-row--total">
+                                  <div className="ord-footer__breakdown-copy">
+                                    <span className="ord-footer__breakdown-label">Итого</span>
+                                  </div>
+                                  <span className="ord-footer__breakdown-value">{formatBuyerRub(total)}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <p>Состав цены появится после загрузки курса.</p>
+                            )}
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
+                    <span className="ord-footer__sum">{formatBuyerRub(total)}</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="ord-footer__submit pressable"
+                    onClick={handleSubmitClick}
+                    disabled={!resolvedItems.length}
+                  >
+                    <span className="ord-footer__submit-content">
+                      <span
+                        className={`ord-footer__submit-icon${deliveryCueVisible ? ' ord-footer__submit-icon--alert' : ''}`}
+                        aria-hidden="true"
+                      >
+                        {deliveryCueVisible ? <IconStateAlert size={18} /> : <IconExternalLink size={18} />}
+                      </span>
+                      <span>Оформить заказ</span>
                     </span>
-                    <span>Оформить заказ</span>
-                  </span>
-                </button>
+                  </button>
+                </div>
               </div>
-            </div>
           </div>
 
           <OrdersModalPortal>

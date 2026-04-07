@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 from contextlib import contextmanager
 import httpx
 import json
 import logging
 import mimetypes
+import re
+import secrets
 import threading
 import time
 from datetime import datetime
@@ -40,7 +44,19 @@ from config import (
 from models import ProductDraft, UserSettings
 from services import exchange_rate as er
 import math
-from services.calculator import calculate, get_typical_weight, calculate_simple, get_effective_rate
+from services.calculator import get_typical_weight, get_effective_rate
+from services.delivery_pricing import (
+    DELIVERY_INCLUDES_NOTE,
+    DELIVERY_PAYMENT_NOTE,
+    DELIVERY_PRICE_FIELD_KEYS,
+    DELIVERY_TIMING_FIELD_KEYS,
+    EXPRESS_DELIVERY_TYPE,
+    STANDARD_DELIVERY_TYPE,
+    calculate_pricing_components,
+    get_delivery_info,
+    is_moscow_city,
+    normalize_delivery_type,
+)
 from services.parser import (
     build_dewu_share_url,
     canonicalize_dewu_url,
@@ -49,19 +65,28 @@ from services.parser import (
     needs_poizon_html_fallback,
     parse_url,
 )
-from models import CalculationResult, BreakdownLine
+from models import CalculationResult, BreakdownLine, ExchangeRate
 from services.taobao_1688_api import Open1688SearchUnavailableError, TaobaoSearchUnavailableError
 
 log = logging.getLogger(__name__)
 
+mimetypes.add_type("image/webp", ".webp")
+
 BASE_DIR = Path(__file__).resolve().parent
 MINIAPP_DIR = BASE_DIR / "miniapp" / "dist"
+UPLOADS_DIR = BASE_DIR / "uploads"
+PROMO_BANNER_UPLOADS_DIR = UPLOADS_DIR / "promo-banners"
 _ADMIN_AVATAR_CACHE_TTL_SECONDS = 6 * 60 * 60
 _ADMIN_AVATAR_CACHE_MISS_TTL_SECONDS = 15 * 60
 _admin_avatar_cache: dict[int, tuple[float, str | None, bytes | None]] = {}
 _admin_avatar_cache_lock = threading.Lock()
 DELIVERY_PROFILE_FIELDS = db.DELIVERY_PROFILE_FIELDS
 DELIVERY_REQUIRED_FIELDS = ("city", "street", "house")
+_PROMO_BANNER_UPLOAD_RE = re.compile(
+    r"^data:(?P<mime>image/(?:webp|png|jpeg|jpg));base64,(?P<body>[A-Za-z0-9+/=\s]+)$",
+    re.IGNORECASE,
+)
+_ABOUT_DETAILS_IMAGE_FORMAT = "2:3"
 
 
 @contextmanager
@@ -210,6 +235,67 @@ async def _fetch_image_proxy(url: str) -> tuple[bytes, str, str]:
     return response.content, content_type, cache_control
 
 
+def _resolve_upload_path(request_path: str) -> Path | None:
+    normalized_path = str(request_path or "").split("?", 1)[0].split("#", 1)[0]
+    if not normalized_path.startswith("/uploads/"):
+        return None
+
+    relative_path = Path(normalized_path[len("/uploads/"):])
+    if not relative_path.parts or any(part in ("", ".", "..") for part in relative_path.parts):
+        return None
+
+    uploads_root = UPLOADS_DIR.resolve()
+    candidate = (uploads_root / relative_path).resolve()
+    try:
+        candidate.relative_to(uploads_root)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _save_promo_banner_image(data_url: object, *, prefix: str = "banner") -> dict:
+    data_url_text = str(data_url or "").strip()
+    if not data_url_text:
+        raise ValueError("image_data is required")
+
+    match = _PROMO_BANNER_UPLOAD_RE.match(data_url_text)
+    if not match:
+        raise ValueError("unsupported_image_format")
+
+    mime_type = str(match.group("mime") or "").strip().lower()
+    if mime_type == "image/jpg":
+        mime_type = "image/jpeg"
+
+    try:
+        image_bytes = base64.b64decode(match.group("body"), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("invalid_image_data") from exc
+
+    if not image_bytes:
+        raise ValueError("invalid_image_data")
+    if len(image_bytes) > 4 * 1024 * 1024:
+        raise ValueError("image_too_large")
+
+    PROMO_BANNER_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    file_extension = {
+        "image/webp": ".webp",
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+    }.get(mime_type)
+    if not file_extension:
+        raise ValueError("unsupported_image_format")
+
+    filename = f"{prefix}-{secrets.token_hex(10)}{file_extension}"
+    output_path = PROMO_BANNER_UPLOADS_DIR / filename
+    output_path.write_bytes(image_bytes)
+
+    return {
+        "url": f"/uploads/promo-banners/{filename}",
+        "mime_type": mime_type,
+        "byte_size": len(image_bytes),
+    }
+
+
 def _manual_rate_state(settings: dict | None, now: float | None = None) -> tuple[bool, float | None]:
     current_time = time.time() if now is None else now
     override_raw = str((settings or {}).get("rate_override", "") or "").strip()
@@ -254,6 +340,160 @@ def _display_rate_payload(
         "age_human": "\u0420\u0443\u0447\u043d\u043e\u0439 \u043a\u0443\u0440\u0441" if manual_override_active else (rate.age_human if rate else None),
         "source": source,
     }
+
+
+def _build_delivery_info_payload(settings: dict | None = None) -> dict:
+    return get_delivery_info(settings)
+
+
+def _ensure_product_weight(draft: ProductDraft) -> ProductDraft:
+    if not draft.weight_kg:
+        draft.weight_kg = get_typical_weight(draft.category or "other")
+        draft.weight_estimated = True
+    return draft
+
+
+def _pricing_components_for_draft(
+    draft: ProductDraft,
+    settings: dict,
+    effective_rate: float,
+    *,
+    delivery_type: str | None = None,
+    include_cdek: bool = False,
+) -> dict:
+    _ensure_product_weight(draft)
+    draft.delivery_type = normalize_delivery_type(
+        delivery_type or draft.delivery_type or STANDARD_DELIVERY_TYPE
+    )
+    return calculate_pricing_components(
+        settings,
+        price_cny=draft.price_cny,
+        effective_rate=effective_rate,
+        weight_kg=draft.weight_kg,
+        weight_estimated=bool(draft.weight_estimated),
+        delivery_type=draft.delivery_type,
+        include_cdek=include_cdek,
+    )
+
+
+def _build_pricing_breakdown_payload(
+    *,
+    price_cny: float,
+    effective_rate: float,
+    pricing: dict,
+) -> list[dict]:
+    delivery = pricing["delivery"]
+    rows = [
+        {
+            "label": "Товар",
+            "amount_rub": pricing["goods_rub"],
+            "note": f"{price_cny:.0f} ¥ × {effective_rate:.2f}",
+        },
+        {
+            "label": f"Комиссия ({pricing['commission_pct']:.0f}%)",
+            "amount_rub": pricing["commission_rub"],
+            "note": (
+                f"мин. {pricing['min_commission_rub']:.0f} ₽"
+                if pricing["commission_rub"] <= pricing["min_commission_rub"]
+                else ""
+            ),
+        },
+        {
+            "label": "Доставка до Москвы",
+            "amount_rub": delivery["to_moscow_rub"],
+            "note": f"{delivery['route_label']} • {delivery['units_note']}",
+        },
+    ]
+
+    if delivery["cdek_rub"] > 0:
+        rows.append(
+            {
+                "label": "СДЭК по России",
+                "amount_rub": delivery["cdek_rub"],
+                "note": delivery["units_note"],
+            }
+        )
+
+    return rows
+
+
+def _build_pricing_breakdown_lines(
+    *,
+    price_cny: float,
+    effective_rate: float,
+    pricing: dict,
+) -> list[BreakdownLine]:
+    return [
+        BreakdownLine(item["label"], item["amount_rub"], item["note"])
+        for item in _build_pricing_breakdown_payload(
+            price_cny=price_cny,
+            effective_rate=effective_rate,
+            pricing=pricing,
+        )
+    ]
+
+
+def _build_result_from_pricing(
+    draft: ProductDraft,
+    *,
+    rate_snapshot: ExchangeRate,
+    effective_rate: float,
+    pricing: dict,
+) -> CalculationResult:
+    subtotal = pricing["subtotal_rub"]
+    return CalculationResult(
+        product=draft,
+        breakdown=_build_pricing_breakdown_lines(
+            price_cny=float(draft.price_cny or 0),
+            effective_rate=effective_rate,
+            pricing=pricing,
+        ),
+        subtotal_rub=subtotal,
+        margin_rub=0,
+        total_with_margin_rub=subtotal,
+        margin_percent=0,
+        exchange_rate=rate_snapshot,
+    )
+
+
+def _draft_from_calc_row(row: dict) -> ProductDraft:
+    raw_calc_json = row.get("calc_json")
+    draft: ProductDraft | None = None
+
+    if raw_calc_json:
+        try:
+            parsed = json.loads(raw_calc_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = {}
+        product_payload = (
+            parsed.get("product")
+            if isinstance(parsed, dict) and isinstance(parsed.get("product"), dict)
+            else parsed
+        )
+        if isinstance(product_payload, dict):
+            draft = _draft_from_payload(product_payload)
+
+    if draft is None:
+        draft = ProductDraft()
+
+    if draft.price_cny is None and row.get("price_cny") is not None:
+        draft.price_cny = float(row["price_cny"])
+    if draft.weight_kg is None and row.get("weight_kg") is not None:
+        draft.weight_kg = float(row["weight_kg"])
+    if not draft.name:
+        draft.name = str(row.get("name") or "")
+    if not draft.platform:
+        draft.platform = str(row.get("platform") or "unknown")
+    if not draft.size:
+        draft.size = str(row.get("size") or "")
+    if not draft.url:
+        draft.url = str(row.get("product_url") or "")
+    if not draft.city:
+        draft.city = str(row.get("city") or "")
+    if not draft.delivery_type:
+        draft.delivery_type = str(row.get("delivery_type") or "")
+    draft.weight_estimated = bool(draft.weight_estimated or row.get("weight_estimated"))
+    return draft
 
 
 def _draft_to_dict(draft: ProductDraft) -> dict:
@@ -323,11 +563,10 @@ async def _build_calculation_result(payload: dict):
     """Miniapp calculator — uses admin settings (same formula as bot's calculate_simple)."""
     draft = _draft_from_payload(payload.get("product") or {})
     draft.city = payload.get("city") or draft.city or "moscow"
-    draft.delivery_type = payload.get("delivery_type") or draft.delivery_type or "standard"
-
-    if not draft.weight_kg:
-        draft.weight_kg = get_typical_weight(draft.category or "other")
-        draft.weight_estimated = True
+    draft.delivery_type = normalize_delivery_type(
+        payload.get("delivery_type") or draft.delivery_type or STANDARD_DELIVERY_TYPE
+    )
+    _ensure_product_weight(draft)
 
     if draft.price_cny is None:
         raise RuntimeError("price_cny is required")
@@ -340,56 +579,30 @@ async def _build_calculation_result(payload: dict):
 
     admin = await db.get_admin_settings()
     eff_rate = await get_effective_rate()
-
-    # --- breakdown matching bot's calculate_simple logic ---
-    goods_rub      = draft.price_cny * eff_rate
-    comm_pct       = float(admin.get("commission_pct", "10.0"))
-    min_commission = float(admin.get("min_commission_rub", "300.0"))
-    commission     = max(goods_rub * comm_pct / 100, min_commission)
-    logistics      = float(admin.get("logistics_rub", "500.0"))
-    insurance      = float(admin.get("insurance_rub", "200.0"))
-    price_per_kg   = float(admin.get("price_per_kg", "250.0"))
-    weight_rounded = math.ceil(max(draft.weight_kg or 1.0, 1.0))
-    weight_fee     = weight_rounded * price_per_kg
-
-    delivery_total = logistics + insurance + weight_fee
-    weight_note = f"~{weight_rounded} кг" if draft.weight_estimated else f"{weight_rounded} кг"
-
-    breakdown = [
-        BreakdownLine("Товар", goods_rub, f"{draft.price_cny:.0f} ¥ × {eff_rate:.2f}"),
-        BreakdownLine(f"Комиссия ({comm_pct:.0f}%)", commission,
-                      f"мин. {min_commission:.0f} ₽" if commission <= min_commission else ""),
-        BreakdownLine("Доставка Китай → РФ", delivery_total, weight_note),
-    ]
-
-    subtotal = goods_rub + commission + delivery_total
-
-    return CalculationResult(
-        product=draft,
-        breakdown=breakdown,
-        subtotal_rub=subtotal,
-        margin_rub=0,
-        total_with_margin_rub=subtotal,
-        margin_percent=0,
-        exchange_rate=rate,
+    pricing = _pricing_components_for_draft(
+        draft,
+        admin,
+        eff_rate,
+        delivery_type=draft.delivery_type,
+        include_cdek=False,
+    )
+    return _build_result_from_pricing(
+        draft,
+        rate_snapshot=rate,
+        effective_rate=eff_rate,
+        pricing=pricing,
     )
 
 
 def _calculate_showcase_subtotal(draft: ProductDraft, settings: dict, effective_rate: float) -> float:
-    if not draft.weight_kg:
-        draft.weight_kg = get_typical_weight(draft.category or "other")
-        draft.weight_estimated = True
-
-    goods_rub = float(draft.price_cny or 0) * effective_rate
-    commission_pct = float(settings.get("commission_pct", "10.0"))
-    min_commission = float(settings.get("min_commission_rub", "300.0"))
-    commission = max(goods_rub * commission_pct / 100, min_commission)
-    logistics = float(settings.get("logistics_rub", "500.0"))
-    insurance = float(settings.get("insurance_rub", "200.0"))
-    price_per_kg = float(settings.get("price_per_kg", "250.0"))
-    weight_rounded = math.ceil(max(draft.weight_kg or 1.0, 1.0))
-    weight_fee = weight_rounded * price_per_kg
-    return goods_rub + commission + logistics + insurance + weight_fee
+    pricing = _pricing_components_for_draft(
+        draft,
+        settings,
+        effective_rate,
+        delivery_type=STANDARD_DELIVERY_TYPE,
+        include_cdek=False,
+    )
+    return pricing["subtotal_rub"]
 
 
 def _showcase_product_payload_is_incomplete(product_payload: object) -> bool:
@@ -567,6 +780,7 @@ def _result_to_payload(
             {"label": item.label, "amount_rub": item.amount_rub, "note": item.note}
             for item in result.breakdown
         ],
+        "delivery_info": _build_delivery_info_payload(settings),
     }
 
 
@@ -611,6 +825,8 @@ async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -
         settings=admin,
         effective_rate=effective_rate,
     )
+    about_details_payload = await _about_details_payload()
+    promo_banners_payload = await _promo_banners_payload()
     user_settings = None
     if user_id:
         user = await db.get_or_create_user(user_id)
@@ -626,6 +842,7 @@ async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -
             effective_rate=effective_rate,
         ),
         "admin_settings": admin,
+        "delivery_info": _build_delivery_info_payload(admin),
         "user_settings": user_settings or {
             "margin_steps": DEFAULT_MARGIN_STEPS,
             "margin_min_rub": DEFAULT_MARGIN_MIN_RUB,
@@ -644,6 +861,9 @@ async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -
         "admin_contact_user_id": _admin_contact_user_id(),
         "showcase_items": showcase_payload["items"],
         "showcase_configured_count": showcase_payload["configured_count"],
+        "about_details_slides": about_details_payload["items"],
+        "promo_banners": promo_banners_payload["items"],
+        "promo_entry_banner_id": promo_banners_payload["entry_banner_id"],
         "is_admin": is_admin_user,
     }
 
@@ -707,11 +927,8 @@ async def _save_delivery_profile_payload(payload: dict) -> dict:
 _ADMIN_PRICING_FIELDS = {
     "commission_pct",
     "min_commission_rub",
-    "logistics_rub",
-    "insurance_rub",
-    "price_per_kg",
-    "delivery_time",
-    "next_shipment_date",
+    *DELIVERY_PRICE_FIELD_KEYS,
+    *DELIVERY_TIMING_FIELD_KEYS,
     "rate_override",
 }
 
@@ -725,6 +942,9 @@ _ADMIN_MESSAGE_TYPE_LABELS = {
 _SHOWCASE_SLOT_COUNT = db.SHOWCASE_SLOT_COUNT
 _SHOWCASE_ROW_SIZE = 5
 _SHOWCASE_FIELD_MAX_LENGTH = 2048
+_PROMO_BANNER_EDITOR_IMAGE_FORMAT = "WEBP"
+_PROMO_BANNER_EDITOR_COVER_SIZE = "1320 x 480"
+_PROMO_BANNER_EDITOR_INLINE_SIZE = "1200 x 1200"
 
 
 class ShowcaseValidationError(ValueError):
@@ -752,13 +972,331 @@ def _normalize_admin_page(raw_value: object, default: int = 1) -> int:
     return max(1, value)
 
 
+def _format_admin_timestamp(value: object) -> str:
+    try:
+        timestamp = float(value or 0)
+    except (TypeError, ValueError):
+        timestamp = 0.0
+
+    if timestamp <= 0:
+        return "—"
+
+    try:
+        return datetime.fromtimestamp(timestamp).strftime("%d.%m.%Y в %H:%M")
+    except (OverflowError, OSError, ValueError):
+        return "—"
+
+
+def _serialize_promo_banner_block(block: dict | None) -> dict:
+    banner_block = block if isinstance(block, dict) else {}
+    block_type = str(banner_block.get("type") or "").strip().lower()
+    block_id = str(banner_block.get("id") or "").strip()
+
+    payload = {
+        "id": block_id,
+        "type": block_type,
+    }
+
+    if block_type == "list":
+        payload["items"] = [
+            str(item).strip()
+            for item in banner_block.get("items") or []
+            if str(item).strip()
+        ]
+        return payload
+
+    if block_type == "image":
+        payload["image_url"] = str(banner_block.get("image_url") or "").strip()
+        payload["alt_text"] = str(banner_block.get("alt_text") or "").strip()
+        payload["caption"] = str(banner_block.get("caption") or "").strip()
+        return payload
+
+    if block_type == "button":
+        payload["button_label"] = str(banner_block.get("button_label") or "").strip()
+        payload["button_url"] = str(banner_block.get("button_url") or "").strip()
+        payload["button_color"] = str(banner_block.get("button_color") or "").strip()
+        return payload
+
+    payload["text"] = str(banner_block.get("text") or "").strip()
+    return payload
+
+
+def _serialize_promo_banner_item(item: dict | None) -> dict:
+    banner_item = item if isinstance(item, dict) else {}
+    updated_at = float(banner_item.get("updated_at") or 0)
+    blocks = [
+        _serialize_promo_banner_block(block)
+        for block in banner_item.get("blocks") or []
+    ]
+
+    return {
+        "id": int(banner_item.get("id") or 0),
+        "label": str(banner_item.get("label") or "").strip(),
+        "title": str(banner_item.get("title") or "").strip(),
+        "subtitle": str(banner_item.get("subtitle") or "").strip(),
+        "button_label": str(banner_item.get("button_label") or "").strip(),
+        "button_url": str(banner_item.get("button_url") or "").strip(),
+        "button_color": str(banner_item.get("button_color") or "").strip(),
+        "image_url": str(banner_item.get("image_url") or "").strip(),
+        "image_alt": str(banner_item.get("image_alt") or "").strip(),
+        "story_image_url": str(banner_item.get("story_image_url") or "").strip(),
+        "story_image_alt": str(banner_item.get("story_image_alt") or "").strip(),
+        "blocks": blocks,
+        "position": int(banner_item.get("position") or 0),
+        "show_on_entry": bool(banner_item.get("show_on_entry")),
+        "created_at": float(banner_item.get("created_at") or 0),
+        "updated_at": updated_at,
+        "updated_at_label": _format_admin_timestamp(updated_at),
+    }
+
+
+async def _promo_banners_payload() -> dict:
+    items = [_serialize_promo_banner_item(item) for item in await db.get_admin_banners()]
+    entry_banner = next((item for item in items if item.get("show_on_entry")), None)
+    return {
+        "items": items,
+        "entry_banner_id": int(entry_banner.get("id") or 0) if entry_banner else 0,
+    }
+
+
+def _serialize_about_slide_item(item: dict | None) -> dict:
+    slide_item = item if isinstance(item, dict) else {}
+    slot = int(slide_item.get("slot") or 0)
+    updated_at = float(slide_item.get("updated_at") or 0)
+    image_alt = str(slide_item.get("image_alt") or "").strip() or f"Слайд {slot}"
+
+    return {
+        "slot": slot,
+        "image_url": str(slide_item.get("image_url") or "").strip(),
+        "image_alt": image_alt,
+        "updated_at": updated_at,
+        "updated_at_label": _format_admin_timestamp(updated_at),
+    }
+
+
+async def _about_details_payload() -> dict:
+    items = [_serialize_about_slide_item(item) for item in await db.get_admin_about_slides()]
+    return {
+        "items": items,
+    }
+
+
+async def _admin_about_details_payload() -> dict:
+    items = [_serialize_about_slide_item(item) for item in await db.get_admin_about_slides()]
+    latest_updated_at = max((float(item.get("updated_at") or 0) for item in items), default=0.0)
+    return {
+        "items": items,
+        "stats": {
+            "total": len(items),
+            "latest_updated_at": latest_updated_at,
+            "latest_updated_at_label": _format_admin_timestamp(latest_updated_at),
+        },
+        "upload": {
+            "format": _ABOUT_DETAILS_IMAGE_FORMAT,
+            "required_size": _ABOUT_DETAILS_IMAGE_FORMAT,
+        },
+    }
+
+
+async def _admin_about_details_upload_payload(payload: dict) -> dict:
+    try:
+        slot = int(payload.get("slot") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid slide slot") from exc
+
+    insert_mode = bool(payload.get("insert"))
+    if slot < 1:
+        raise ValueError("Invalid slide slot")
+
+    upload_payload = _save_promo_banner_image(
+        payload.get("image_data"),
+        prefix=f"about-slide-{slot:02d}",
+    )
+    await db.set_admin_about_slide(
+        slot,
+        str(upload_payload.get("url") or ""),
+        str(payload.get("image_alt") or f"Слайд {slot}"),
+    )
+
+    response_payload = await _admin_about_details_payload()
+    response_payload["updated_slot"] = slot
+    response_payload["uploaded_image"] = {
+        **upload_payload,
+        "slot": slot,
+    }
+    return response_payload
+
+
+async def _admin_about_details_delete_payload(payload: dict) -> dict:
+    try:
+        slot = int(payload.get("slot") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid slide slot") from exc
+
+    await db.delete_admin_about_slide(slot)
+    response_payload = await _admin_about_details_payload()
+    response_payload["deleted_slot"] = slot
+    return response_payload
+
+
+async def _admin_promo_banners_payload() -> dict:
+    items = [_serialize_promo_banner_item(item) for item in await db.get_admin_banners()]
+    latest_updated_at = max((float(item.get("updated_at") or 0) for item in items), default=0.0)
+    return {
+        "items": items,
+        "stats": {
+            "total": len(items),
+            "auto_open_count": sum(1 for item in items if item.get("show_on_entry")),
+            "latest_updated_at": latest_updated_at,
+            "latest_updated_at_label": _format_admin_timestamp(latest_updated_at),
+        },
+        "limits": {
+            "max_banners": db.PROMO_BANNER_MAX_COUNT,
+            "max_blocks": db.PROMO_BANNER_BLOCK_MAX_COUNT,
+        },
+        "upload": {
+            "format": _PROMO_BANNER_EDITOR_IMAGE_FORMAT,
+            "cover_size": _PROMO_BANNER_EDITOR_COVER_SIZE,
+            "inline_size": _PROMO_BANNER_EDITOR_INLINE_SIZE,
+        },
+    }
+
+
+async def _admin_promo_banner_save_payload(payload: dict) -> dict:
+    try:
+        banner_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid banner id") from exc
+
+    saved_banner = await db.save_admin_banner(
+        banner_id,
+        str(payload.get("label") or ""),
+        str(payload.get("title") or ""),
+        str(payload.get("subtitle") or ""),
+        str(payload.get("button_label") or ""),
+        str(payload.get("button_url") or ""),
+        str(payload.get("button_color") or ""),
+        str(payload.get("image_url") or ""),
+        str(payload.get("image_alt") or ""),
+        str(payload.get("story_image_url") or ""),
+        str(payload.get("story_image_alt") or ""),
+        bool(payload.get("show_on_entry")),
+        payload.get("blocks") if isinstance(payload.get("blocks"), list) else [],
+    )
+    response_payload = await _admin_promo_banners_payload()
+    response_payload["saved_banner_id"] = int(saved_banner.get("id") or 0)
+    return response_payload
+
+
+async def _admin_promo_banner_delete_payload(payload: dict) -> dict:
+    try:
+        banner_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid banner id") from exc
+
+    await db.delete_admin_banner(banner_id)
+    return await _admin_promo_banners_payload()
+
+
+async def _admin_promo_banner_upload_payload(payload: dict) -> dict:
+    asset_kind = str(payload.get("asset_kind") or "cover").strip().lower()
+    if asset_kind not in {"cover", "block"}:
+        asset_kind = "cover"
+
+    upload_payload = _save_promo_banner_image(
+        payload.get("image_data"),
+        prefix=f"promo-{asset_kind}",
+    )
+    return {
+        **upload_payload,
+        "asset_kind": asset_kind,
+    }
+
+
+def _serialize_faq_item(item: dict | None) -> dict:
+    faq_item = item if isinstance(item, dict) else {}
+    updated_at = float(faq_item.get("updated_at") or 0)
+    answer = str(faq_item.get("answer") or "").strip()
+    link_url = str(faq_item.get("link_url") or "").strip()
+    button_label = str(faq_item.get("button_label") or "").strip()
+    preview_limit = 180
+
+    return {
+        "id": int(faq_item.get("id") or 0),
+        "question": str(faq_item.get("question") or "").strip(),
+        "answer": answer,
+        "link_url": link_url,
+        "button_label": button_label,
+        "position": int(faq_item.get("position") or 0),
+        "updated_at": updated_at,
+        "updated_at_label": _format_admin_timestamp(updated_at),
+        "answer_preview": (
+            answer[:preview_limit].rstrip() + "…"
+            if len(answer) > preview_limit
+            else answer
+        ),
+    }
+
+
+async def _faq_payload() -> dict:
+    items = [_serialize_faq_item(item) for item in await db.get_faq_entries()]
+    return {
+        "items": items,
+        "contact": {
+            "url": _admin_contact_url(),
+            "username": _admin_contact_username(),
+            "user_id": _admin_contact_user_id(),
+        },
+    }
+
+
+async def _admin_faq_payload() -> dict:
+    items = [_serialize_faq_item(item) for item in await db.get_faq_entries()]
+    latest_updated_at = max((item["updated_at"] for item in items), default=0.0)
+
+    return {
+        "items": items,
+        "stats": {
+            "total": len(items),
+            "latest_updated_at": latest_updated_at,
+            "latest_updated_at_label": _format_admin_timestamp(latest_updated_at),
+        },
+    }
+
+
+async def _admin_faq_save_payload(payload: dict) -> dict:
+    try:
+        entry_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid faq entry id") from exc
+
+    await db.save_faq_entry(
+        entry_id,
+        str(payload.get("question") or ""),
+        str(payload.get("answer") or ""),
+        str(payload.get("link_url") or ""),
+        str(payload.get("button_label") or ""),
+    )
+    return await _admin_faq_payload()
+
+
+async def _admin_faq_delete_payload(payload: dict) -> dict:
+    try:
+        entry_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid faq entry id") from exc
+
+    await db.delete_faq_entry(entry_id)
+    return await _admin_faq_payload()
+
+
 def _build_admin_settings_updates(field: str, raw_value: object, now: float | None = None) -> dict[str, str]:
     if field not in _ADMIN_PRICING_FIELDS:
         raise ValueError("Unknown admin setting")
 
     value = str(raw_value or "").strip()
 
-    if field in {"delivery_time", "next_shipment_date"}:
+    if field in set(DELIVERY_TIMING_FIELD_KEYS):
         return {field: value[:100]}
 
     if field == "rate_override":
@@ -1318,12 +1856,9 @@ async def _notify_admin_order_action(action: str, item: dict) -> None:
         return
 
     if action == "mark_shipped":
-        settings = await db.get_admin_settings()
-        delivery_time = str(settings.get("delivery_time") or "").strip()
-        delivery_line = f"\n\nПримерное время доставки: {delivery_time}" if delivery_time else ""
         await _send_telegram_message(
             user_id,
-            f"🚚 Ваш товар отправлен.\n\n• {product_name}\n\nОжидайте прибытия.{delivery_line}",
+            f"🚚 Ваш товар отправлен.\n\n• {product_name}\n\nОжидайте прибытия.",
         )
         return
 
@@ -1983,9 +2518,16 @@ async def _history_payload(user_id: int) -> list[dict]:
         if cj:
             try:
                 parsed = json.loads(cj)
+                row["url"] = parsed.get("url", "")
+                row["price_is_starting"] = bool(parsed.get("price_is_starting", False))
+                row["size"] = parsed.get("size", "")
+                row["weight_kg"] = parsed.get("weight_kg")
+                row["weight_estimated"] = bool(parsed.get("weight_estimated", False))
+                row["notes"] = parsed.get("notes", "")
                 row["image_url"] = parsed.get("image_url", "")
                 row["extra_images"] = parsed.get("extra_images", [])
                 row["variants"] = parsed.get("variants", [])
+                row["original_variants"] = parsed.get("original_variants", [])
                 row["variant_price_map"] = parsed.get("variant_price_map", {})
                 row["specs"] = parsed.get("specs", {})
                 row["available_sizes"] = parsed.get("available_sizes", [])
@@ -2001,12 +2543,28 @@ async def _history_payload(user_id: int) -> list[dict]:
 
 async def _cart_payload(user_id: int) -> list[dict]:
     rows = await db.cart_get_items(user_id)
+    admin = await db.get_admin_settings()
+    effective_rate = await get_effective_rate()
 
     # Backfill short_name for items that don't have one yet
     from services.market_compare import extract_search_query
     for row in rows:
         row["tracking_number"] = str(row.get("tracking_number") or "").strip()
         row["item_number"] = _normalize_item_number(row.get("item_number"))
+        if row.get("price_cny") is not None:
+            try:
+                draft = _draft_from_calc_row(row)
+                pricing = _pricing_components_for_draft(
+                    draft,
+                    admin,
+                    effective_rate,
+                    delivery_type=STANDARD_DELIVERY_TYPE,
+                    include_cdek=False,
+                )
+                row["subtotal_rub"] = pricing["subtotal_rub"]
+                row["total_with_margin_rub"] = pricing["subtotal_rub"]
+            except Exception:
+                pass
         if not row.get("short_name") and row.get("name"):
             try:
                 category = ""
@@ -2086,6 +2644,53 @@ async def _clear_cart_payload(payload: dict) -> dict:
     return {"ok": True}
 
 
+async def _apply_order_delivery_pricing(
+    user_id: int,
+    delivery_data: dict,
+    *,
+    delivery_type: str,
+) -> None:
+    rows = await db.cart_get_pending_order_items(user_id)
+    if not rows:
+        return
+
+    admin = await db.get_admin_settings()
+    effective_rate = await get_effective_rate()
+    rate_snapshot = await er.get_rate()
+    if not rate_snapshot:
+        rate_snapshot = ExchangeRate(
+            cny_rub=effective_rate,
+            usd_rub=0.0,
+            eur_rub=0.0,
+            updated_at=datetime.utcnow(),
+        )
+
+    include_cdek = not is_moscow_city(delivery_data.get("city"))
+    normalized_delivery_type = normalize_delivery_type(delivery_type)
+
+    for row in rows:
+        calc_id = int(row.get("id") or 0)
+        if calc_id <= 0:
+            continue
+
+        draft = _draft_from_calc_row(row)
+        draft.city = str(delivery_data.get("city") or draft.city or "")
+        pricing = _pricing_components_for_draft(
+            draft,
+            admin,
+            effective_rate,
+            delivery_type=normalized_delivery_type,
+            include_cdek=include_cdek,
+        )
+        result = _build_result_from_pricing(
+            draft,
+            rate_snapshot=rate_snapshot,
+            effective_rate=effective_rate,
+            pricing=pricing,
+        )
+        await db.update_calculation(calc_id, user_id, result)
+
+
 async def _submit_order_payload(payload: dict) -> dict:
     user_id = int(payload.get("user_id") or 0)
     if user_id <= 0:
@@ -2097,6 +2702,13 @@ async def _submit_order_payload(payload: dict) -> dict:
         error = ValueError("delivery_data_incomplete")
         setattr(error, "missing_required", missing_required)
         raise error
+
+    delivery_type = normalize_delivery_type(payload.get("delivery_type"))
+    await _apply_order_delivery_pricing(
+        user_id,
+        delivery_data,
+        delivery_type=delivery_type,
+    )
 
     submission_batch_id = f"sub-{user_id}-{int(time.time() * 1000)}"
     submitted_at = datetime.utcnow().isoformat()
@@ -2178,36 +2790,29 @@ async def _cart_item_detail(payload: dict) -> dict:
             pass
     admin = await db.get_admin_settings()
     eff_rate = await get_effective_rate()
-    # Rebuild breakdown with current settings
-    goods_rub = result.product.price_cny * eff_rate
-    comm_pct = float(admin.get("commission_pct", "10.0"))
-    min_commission = float(admin.get("min_commission_rub", "300.0"))
-    commission = max(goods_rub * comm_pct / 100, min_commission)
-    logistics = float(admin.get("logistics_rub", "500.0"))
-    insurance = float(admin.get("insurance_rub", "200.0"))
-    price_per_kg = float(admin.get("price_per_kg", "250.0"))
-    weight_rounded = math.ceil(max(result.product.weight_kg or 1.0, 1.0))
-    weight_fee = weight_rounded * price_per_kg
-    delivery_total = logistics + insurance + weight_fee
-    weight_note = f"~{weight_rounded} кг" if result.product.weight_estimated else f"{weight_rounded} кг"
-    breakdown = [
-        {"label": "Товар", "amount_rub": goods_rub, "note": f"{result.product.price_cny:.0f} ¥ × {eff_rate:.2f}"},
-        {"label": f"Комиссия ({comm_pct:.0f}%)", "amount_rub": commission,
-         "note": f"мин. {min_commission:.0f} ₽" if commission <= min_commission else ""},
-        {"label": "Доставка Китай → РФ", "amount_rub": delivery_total, "note": weight_note},
-    ]
-    subtotal = goods_rub + commission + delivery_total
+    pricing = _pricing_components_for_draft(
+        result.product,
+        admin,
+        eff_rate,
+        delivery_type=STANDARD_DELIVERY_TYPE,
+        include_cdek=False,
+    )
+    breakdown = _build_pricing_breakdown_payload(
+        price_cny=float(result.product.price_cny or 0),
+        effective_rate=eff_rate,
+        pricing=pricing,
+    )
+    subtotal = pricing["subtotal_rub"]
     return {
         "product": _draft_to_dict(result.product),
         "breakdown": breakdown,
         "subtotal_rub": subtotal,
-        "delivery_time": admin.get("delivery_time"),
-        "next_shipment_date": admin.get("next_shipment_date"),
         "exchange_rate": _display_rate_payload(
             rate,
             settings=admin,
             effective_rate=eff_rate,
         ),
+        "delivery_info": _build_delivery_info_payload(admin),
     }
 
 
@@ -2230,34 +2835,31 @@ async def _cart_update_variant(payload: dict) -> dict:
     result.product.price_cny = new_price_cny
     result.product.price_is_starting = False
     result.product.size = new_size
-    # Recalculate breakdown
     admin = await db.get_admin_settings()
     eff_rate = await get_effective_rate()
-    goods_rub = new_price_cny * eff_rate
-    comm_pct = float(admin.get("commission_pct", "10.0"))
-    min_commission = float(admin.get("min_commission_rub", "300.0"))
-    commission = max(goods_rub * comm_pct / 100, min_commission)
-    logistics = float(admin.get("logistics_rub", "500.0"))
-    insurance = float(admin.get("insurance_rub", "200.0"))
-    price_per_kg = float(admin.get("price_per_kg", "250.0"))
-    weight_rounded = math.ceil(max(result.product.weight_kg or 1.0, 1.0))
-    weight_fee = weight_rounded * price_per_kg
-    delivery_total = logistics + insurance + weight_fee
-    weight_note = f"~{weight_rounded} кг" if result.product.weight_estimated else f"{weight_rounded} кг"
-    subtotal = goods_rub + commission + delivery_total
-    # Update result for DB persistence
+    pricing = _pricing_components_for_draft(
+        result.product,
+        admin,
+        eff_rate,
+        delivery_type=STANDARD_DELIVERY_TYPE,
+        include_cdek=False,
+    )
+    subtotal = pricing["subtotal_rub"]
+    result.breakdown = _build_pricing_breakdown_lines(
+        price_cny=float(new_price_cny or 0),
+        effective_rate=eff_rate,
+        pricing=pricing,
+    )
     result.subtotal_rub = subtotal
     result.total_with_margin_rub = subtotal
     result.margin_rub = 0
     result.margin_percent = 0
-    # Persist
     await db.update_calculation(calc_id, user_id, result)
-    breakdown = [
-        {"label": "Товар", "amount_rub": goods_rub, "note": f"{new_price_cny:.0f} ¥ × {eff_rate:.2f}"},
-        {"label": f"Комиссия ({comm_pct:.0f}%)", "amount_rub": commission,
-         "note": f"мин. {min_commission:.0f} ₽" if commission <= min_commission else ""},
-        {"label": "Доставка Китай → РФ", "amount_rub": delivery_total, "note": weight_note},
-    ]
+    breakdown = _build_pricing_breakdown_payload(
+        price_cny=float(new_price_cny or 0),
+        effective_rate=eff_rate,
+        pricing=pricing,
+    )
     return {
         "breakdown": breakdown,
         "subtotal_rub": subtotal,
@@ -2267,6 +2869,7 @@ async def _cart_update_variant(payload: dict) -> dict:
             settings=admin,
             effective_rate=eff_rate,
         ),
+        "delivery_info": _build_delivery_info_payload(admin),
     }
 
 
@@ -2536,6 +3139,13 @@ class MiniAppHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/health":
             self._send_json({"ok": True, "active_requests": active_requests})
             return
+        if parsed.path.startswith("/uploads/"):
+            upload_path = _resolve_upload_path(parsed.path)
+            if not upload_path:
+                self._send_json({"error": "Invalid upload path"}, status=400)
+                return
+            self._send_file(upload_path)
+            return
         if parsed.path == "/api/image-proxy":
             query = parse_qs(parsed.query)
             target_url = str((query.get("url") or [""])[0] or "").strip()
@@ -2578,6 +3188,15 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                 self._send_json(payload)
             except Exception as e:
                 log.exception("bootstrap error")
+                self._send_json({"error": str(e)}, status=500)
+            return
+
+        if parsed.path == "/api/faq":
+            try:
+                payload = self._run(_faq_payload())
+                self._send_json(payload)
+            except Exception as e:
+                log.exception("faq error")
                 self._send_json({"error": str(e)}, status=500)
             return
 
@@ -2807,6 +3426,104 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                         },
                         status=400,
                     )
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/about-carousel":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                result = self._run(_admin_about_details_payload())
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/about-carousel/upload":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_about_details_upload_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/about-carousel/delete":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_about_details_delete_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/banners":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                result = self._run(_admin_promo_banners_payload())
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/banners/save":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_promo_banner_save_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/banners/delete":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_promo_banner_delete_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/banners/upload":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_promo_banner_upload_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/faq":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                result = self._run(_admin_faq_payload())
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/faq/save":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_faq_save_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "admin_id": admin_id, **result})
+                return
+            if self.path == "/api/admin/faq/delete":
+                admin_id = self._require_admin(payload)
+                if admin_id is None:
+                    return
+                try:
+                    result = self._run(_admin_faq_delete_payload(payload))
+                except ValueError as exc:
+                    self._send_json({"error": str(exc)}, status=400)
                     return
                 self._send_json({"ok": True, "admin_id": admin_id, **result})
                 return

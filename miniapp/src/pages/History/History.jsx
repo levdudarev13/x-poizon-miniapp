@@ -2,16 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import StateSurface from '../../components/ui/StateSurface'
 import {
-  IconCalculator,
   IconStateAlert,
   IconStateEmpty,
   IconStateRetry,
 } from '../../components/ui/Icons'
+import BrandGemIcon from '../../components/ui/BrandGemIcon'
 import ProductThumb from '../../components/ui/ProductThumb'
 import { BUYER_MOTION } from '../../constants/buyerMotion'
 import { formatBuyerRub } from '../../constants/buyerNumbers'
 import { BUYER_STATE_COPY } from '../../constants/buyerStateContent'
-import { PLATFORM_COLORS, PLATFORM_NAMES } from '../../constants/platformMeta'
 import { useTelegram } from '../../hooks/useTelegram'
 import { repairMojibakeDeep } from '../../utils/text'
 import './History.css'
@@ -145,15 +144,12 @@ export default function History({ onOpenProduct, active }) {
           <div className="hist-body">
             <div className="hist-grid">
               {items.map((item, index) => {
-                const platformColor = PLATFORM_COLORS[item.platform] || '#555555'
-                const platformLabel = PLATFORM_NAMES[item.platform] || item.platform || 'Товар'
                 const totalRub = item.subtotal_rub || item.total_with_margin_rub
 
                 return (
                   <motion.article
                     key={item.id}
                     className="hist-card"
-                    style={{ '--hist-platform-color': platformColor }}
                     initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 14 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
@@ -167,17 +163,9 @@ export default function History({ onOpenProduct, active }) {
                           src={item.image_url}
                           alt=""
                           className="hist-card__thumb"
-                          fallbackLabel={platformLabel}
+                          fallbackLabel={item.name || 'Товар'}
                           size="lg"
                         />
-
-                        {item.platform ? (
-                          <div className="hist-card__chips">
-                            <span className="hist-card__chip hist-card__chip--platform">
-                              {platformLabel}
-                            </span>
-                          </div>
-                        ) : null}
                       </div>
                     </div>
 
@@ -193,7 +181,7 @@ export default function History({ onOpenProduct, active }) {
                           aria-label="Открыть расчет"
                           onClick={() => handleCalc(item)}
                         >
-                          <IconCalculator size={16} />
+                          <BrandGemIcon className="hist-card__calc-art" />
                         </button>
                       </div>
                     </div>

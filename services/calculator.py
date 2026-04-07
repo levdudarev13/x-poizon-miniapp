@@ -9,6 +9,7 @@ from config import (
     CITY_SURCHARGE_RUB,
     CATEGORIES, PRICE_RANGES_CNY,
 )
+from services.delivery_pricing import calculate_pricing_components
 
 
 def get_typical_weight(category: str) -> float:
@@ -120,19 +121,16 @@ def calculate_simple(price_cny: float, weight_kg: float, admin: dict) -> int:
     Вес округляется вверх до целого кг, минимум 1 кг.
     Комиссия не меньше min_commission_rub.
     """
-    commission_pct    = float(admin.get("commission_pct",    10.0))
-    min_commission    = float(admin.get("min_commission_rub", 300.0))
-    logistics_rub     = float(admin.get("logistics_rub",     500.0))
-    insurance_rub     = float(admin.get("insurance_rub",     200.0))
-    price_per_kg      = float(admin.get("price_per_kg",      250.0))
-    rate              = float(admin.get("_effective_rate",   11.5))
-
-    goods_rub        = price_cny * rate
-    commission       = max(goods_rub * commission_pct / 100, min_commission)
-    weight_rounded   = math.ceil(max(weight_kg or 1.0, 1.0))  # мин. 1 кг, округл. вверх
-    weight_fee       = weight_rounded * price_per_kg
-    total = goods_rub + commission + logistics_rub + insurance_rub + weight_fee
-    return int(round(total))
+    rate = float(admin.get("_effective_rate", 11.5))
+    pricing = calculate_pricing_components(
+        admin,
+        price_cny=price_cny,
+        effective_rate=rate,
+        weight_kg=weight_kg,
+        delivery_type="standard",
+        include_cdek=False,
+    )
+    return int(round(pricing["subtotal_rub"]))
 
 
 def validate_price(price_cny: float, category: str) -> tuple[bool, str]:

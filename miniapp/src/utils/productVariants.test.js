@@ -8,12 +8,12 @@ const variantGroups = [
   { name: 'Size', options: ['S', 'M'] },
 ]
 
-test('taobao keeps variant chips selectable without variant prices', () => {
+test('poizon starting-price products keep variant chips selectable without variant prices', () => {
   assert.equal(
     shouldAllowFallbackVariantSelection({
-      platform: 'taobao',
+      platform: 'poizon',
       price_cny: 42.49,
-      price_is_starting: false,
+      price_is_starting: true,
       variants: variantGroups,
       variant_price_map: {},
     }),
@@ -21,16 +21,16 @@ test('taobao keeps variant chips selectable without variant prices', () => {
   )
 })
 
-test('1688 keeps variant chips selectable without variant prices', () => {
+test('non-poizon products do not enable fallback variant selection', () => {
   assert.equal(
     shouldAllowFallbackVariantSelection({
-      platform: '1688',
+      platform: 'other',
       price_cny: 6.78,
       price_is_starting: false,
       variants: variantGroups,
       variant_price_map: {},
     }),
-    true,
+    false,
   )
 })
 

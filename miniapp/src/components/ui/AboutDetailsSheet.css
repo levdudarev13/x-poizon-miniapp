@@ -1,0 +1,39 @@
+.about-details-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding:
+    calc(var(--shell-safe-top, env(safe-area-inset-top, 0px)) + 16px)
+    var(--shell-page-x, 16px)
+    calc(var(--shell-content-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px);
+  background: transparent;
+  touch-action: pan-y;
+}
+
+.about-details-sheet {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  box-shadow: none;
+  touch-action: pan-y;
+}
+
+.about-details-sheet__carousel {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 380px) {
+  .about-details-sheet {
+    max-width: none;
+  }
+}

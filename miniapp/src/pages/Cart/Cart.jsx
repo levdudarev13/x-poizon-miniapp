@@ -61,16 +61,7 @@ const CART_ICONS = {
   IconStatusShipped,
 }
 
-const PLATFORM_COLORS = {
-  poizon: 'var(--accent)',
-  taobao: '#ff6b35',
-  '1688':  '#e74c3c',
-}
-const PLATFORM_NAMES = {
-  poizon: 'Poizon',
-  taobao: 'Taobao',
-  '1688':  '1688',
-}
+const POIZON_ACCENT_COLOR = 'var(--poizon-blue)'
 
 function getStatus(item) {
   if (item.arrived) return 'arrived'
@@ -95,15 +86,16 @@ function pluralItems(n) {
 }
 
 /* ── Component ── */
-export default function Cart({ active }) {
+export default function Cart({ active, guidePreview = null }) {
   const { userId, haptic } = useTelegram()
   const prefersReducedMotion = useReducedMotion()
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
+  const isGuidePreview = Boolean(guidePreview)
+  const [items, setItems] = useState(() => Array.isArray(guidePreview?.items) ? guidePreview.items : [])
+  const [loading, setLoading] = useState(() => !isGuidePreview)
   const [error, setError] = useState(null)
 
   // Selection for order
-  const [selected, setSelected] = useState(new Set())
+  const [selected, setSelected] = useState(() => new Set(Array.isArray(guidePreview?.selectedIds) ? guidePreview.selectedIds : []))
 
   // Detail view
   const [detailItem, setDetailItem] = useState(null)
@@ -133,6 +125,13 @@ export default function Cart({ active }) {
   const undoTimerRef = useRef(null)
 
   const fetchCart = useCallback(async () => {
+    if (isGuidePreview) {
+      setItems(Array.isArray(guidePreview?.items) ? guidePreview.items : [])
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     if (!userId) {
       setItems([])
       setError(null)
@@ -153,15 +152,24 @@ export default function Cart({ active }) {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [guidePreview, isGuidePreview, userId])
 
   // Initial fetch
   useEffect(() => { fetchCart() }, [fetchCart])
 
   // Refetch when tab becomes active
   useEffect(() => {
-    if (active) fetchCart()
-  }, [active, fetchCart])
+    if (active && !isGuidePreview) fetchCart()
+  }, [active, fetchCart, isGuidePreview])
+
+  useEffect(() => {
+    if (!isGuidePreview) return
+
+    setItems(Array.isArray(guidePreview?.items) ? guidePreview.items : [])
+    setSelected(new Set(Array.isArray(guidePreview?.selectedIds) ? guidePreview.selectedIds : []))
+    setError(null)
+    setLoading(false)
+  }, [guidePreview, isGuidePreview])
 
   useEffect(() => {
     const blockShellSwipe = active && (Boolean(detailItem) || showClear)
@@ -172,6 +180,7 @@ export default function Cart({ active }) {
   // ── Selection helpers ──
 
   const toggleSelect = (id) => {
+    if (isGuidePreview) return
     haptic?.('light')
     setSelected(prev => {
       const next = new Set(prev)
@@ -189,6 +198,7 @@ export default function Cart({ active }) {
 
   // Submit selected items to order
   const handleSubmitSelected = async () => {
+    if (isGuidePreview) return
     if (selected.size === 0) return
     haptic?.('medium')
     setSubmitting(true)
@@ -216,6 +226,7 @@ export default function Cart({ active }) {
   // ── Actions ──
 
   const handleOpenDetail = async (item) => {
+    if (isGuidePreview) return
     haptic?.('light')
     setDetailItem(item)
     setDetailLoading(true)
@@ -241,6 +252,7 @@ export default function Cart({ active }) {
   }
 
   const handleCloseDetail = () => {
+    if (isGuidePreview) return
     haptic?.('light')
     setDetailItem(null)
     setDetailData(null)
@@ -452,6 +464,7 @@ export default function Cart({ active }) {
           breakdown: resp.breakdown,
           subtotal_rub: resp.subtotal_rub,
           exchange_rate: resp.exchange_rate,
+          delivery_info: resp.delivery_info || prev?.delivery_info,
           product: { ...prev.product, price_cny: detailCurPrice, size: detailSizeText },
         }))
         setItems(prev => prev.map(i =>
@@ -469,6 +482,7 @@ export default function Cart({ active }) {
   }, [detailCurPrice, detailSizeText, userId])
 
   const handleToggleOrder = async (calcId, currentInOrder) => {
+    if (isGuidePreview) return
     const newValue = !currentInOrder
     haptic?.('medium')
     setActionLoading(prev => ({ ...prev, [`order_${calcId}`]: true }))
@@ -492,6 +506,7 @@ export default function Cart({ active }) {
   }
 
   const handleDelete = async (calcId) => {
+    if (isGuidePreview) return
     haptic?.('medium')
     const itemToDelete = items.find(i => i.id === calcId)
     setActionLoading(prev => ({ ...prev, [`del_${calcId}`]: true }))
@@ -518,6 +533,7 @@ export default function Cart({ active }) {
   }
 
   const handleRestore = async () => {
+    if (isGuidePreview) return
     if (!deletedItem) return
     haptic?.('medium')
     try {
@@ -535,6 +551,7 @@ export default function Cart({ active }) {
   }
 
   const handleClearAll = async () => {
+    if (isGuidePreview) return
     haptic?.('heavy')
     setClearing(true)
     try {
@@ -555,6 +572,7 @@ export default function Cart({ active }) {
   }
 
   const handleDeleteSingle = async (calcId) => {
+    if (isGuidePreview) return
     const clearDeleteKey = `clear_del_${calcId}`
     const currentItemCount = items.length
     haptic?.('medium')
@@ -606,6 +624,16 @@ export default function Cart({ active }) {
       ? `В заявку (${selected.size})`
       : 'Выберите товары'
   const footerSubmitDisabled = submitting || footerMode !== 'selected'
+  const displayFooterLabel = typeof guidePreview?.footerLabel === 'string'
+    ? guidePreview.footerLabel
+    : footerLabel
+  const displayFooterActionText = submitting && !isGuidePreview
+    ? footerActionText
+    : footerMode === 'selected'
+      ? (guidePreview?.footerActionText || footerActionText)
+      : footerActionText
+  const displayFooterSubmitDisabled = isGuidePreview || footerSubmitDisabled
+  const pageClassName = `page cart-page buyer-page buyer-page--cart${isGuidePreview ? ' cart-page--guide-preview' : ''}`
   const clearMenuDeletingId = items.find((item) => actionLoading[`clear_del_${item.id}`])?.id ?? null
   const clearMenuBusy = clearMenuDeletingId != null
   const detailStatus = detailItem ? getStatus(detailItem) : null
@@ -613,9 +641,14 @@ export default function Cart({ active }) {
   const detailBreakdownRows = (detailData?.breakdown || []).map((row, index) => ({
     id: `${row.label}-${index}`,
     label: row.label,
-    note: row.note,
+    note: index === 0 ? row.note : null,
     amount: formatBuyerRub(row.amount_rub),
   }))
+  const detailDeliveryInfo = {
+    standard_days: detailData?.delivery_info?.standard_days || '',
+    express_days: detailData?.delivery_info?.express_days || '',
+    cdek_days: detailData?.delivery_info?.cdek_days || '',
+  }
   const detailSpecRows = detailData?.product?.specs
     ? Object.entries(detailData.product.specs).map(([key, value]) => ({ key, value }))
     : []
@@ -673,7 +706,7 @@ export default function Cart({ active }) {
   // ── Loading state ──
   if (loading) {
     return (
-      <div className="page cart-page buyer-page buyer-page--cart">
+      <div className={pageClassName}>
         <div className="page-header">
           <h1>Корзина</h1>
         </div>
@@ -707,7 +740,7 @@ export default function Cart({ active }) {
 
   if (error && !items.length) {
     return (
-      <div className="page cart-page buyer-page buyer-page--cart">
+      <div className={pageClassName}>
         <div className="page-header">
           <h1>Корзина</h1>
         </div>
@@ -729,7 +762,7 @@ export default function Cart({ active }) {
   // ── Empty state ──
   if (!items.length) {
     return (
-      <div className="page cart-page buyer-page buyer-page--cart">
+      <div className={pageClassName}>
         <div className="page-header">
           <h1>Корзина</h1>
         </div>
@@ -747,7 +780,7 @@ export default function Cart({ active }) {
 
   // ── Cart list view ──
   return (
-    <div className="page cart-page buyer-page buyer-page--cart">
+    <div className={pageClassName}>
       <div className="page-header">
         <div className="cart-header-row">
           <div>
@@ -762,6 +795,7 @@ export default function Cart({ active }) {
           <button
             className="cart-clear-btn pressable"
             onClick={() => { haptic?.('light'); setShowClear(true); setClearStep('menu') }}
+            disabled={isGuidePreview}
           >
             <IconTrash size={18} />
           </button>
@@ -775,6 +809,7 @@ export default function Cart({ active }) {
             <button
               className="cart-select-bar__btn pressable"
               onClick={() => {
+                if (isGuidePreview) return
                 haptic?.('light')
                 const allPendingIds = pendingItems.map(i => i.id)
                 const allSelected = allPendingIds.every(id => selected.has(id))
@@ -798,8 +833,6 @@ export default function Cart({ active }) {
             {items.map(item => {
               const status = getStatus(item)
               const statusMeta = BUYER_STATUS_META[status] || BUYER_STATUS_META.pending
-              const pColor = PLATFORM_COLORS[item.platform] || '#555'
-              const pName = PLATFORM_NAMES[item.platform] || item.platform
               const price = item.subtotal_rub || item.total_with_margin_rub || 0
               const canSelect = isSelectable(item)
               const isSelected = selected.has(item.id)
@@ -814,12 +847,14 @@ export default function Cart({ active }) {
                   exit={{ opacity: 0, x: prefersReducedMotion ? 0 : -100 }}
                   transition={prefersReducedMotion ? BUYER_MOTION.quick : BUYER_MOTION.standard}
                   className={`cart-card card${isSelected ? ' cart-card--selected' : ''}${isInOrder ? ' cart-card--in-order' : ''}`}
+                  data-order-guide-step-six-target={isGuidePreview && isSelected ? 'card' : undefined}
                 >
                   {/* Checkbox area — only for pending items */}
                   {canSelect ? (
                     <button
                       className="cart-card__check pressable"
                       onClick={(e) => { e.stopPropagation(); toggleSelect(item.id) }}
+                      disabled={isGuidePreview}
                     >
                       <span className={`cart-checkbox ${isSelected ? 'cart-checkbox--checked' : ''}`}>
                         {isSelected && <IconCheck size={18} />}
@@ -843,20 +878,15 @@ export default function Cart({ active }) {
 
                   {/* Card body — clickable for detail */}
                   <div className="cart-card__main pressable" onClick={() => handleOpenDetail(item)}>
-                    <div className="cart-card__accent" style={{ background: pColor }} />
+                    <div className="cart-card__accent" style={{ background: POIZON_ACCENT_COLOR }} />
 
-                    <CartThumb calcJson={item.calc_json} platform={item.platform} />
+                    <CartThumb calcJson={item.calc_json} />
 
                     <div className="cart-card__body">
                       <div className="cart-card__name">
                         {item.short_name || item.name || 'Товар'}
                       </div>
                       <span className="cart-card__price">{formatBuyerRub(price)}</span>
-                      <div className="cart-card__meta-row">
-                        <span className="cart-card__platform" style={{ color: pColor }}>
-                          {pName}
-                        </span>
-                      </div>
                     </div>
                   </div>
                 </motion.div>
@@ -867,9 +897,9 @@ export default function Cart({ active }) {
 
         <div className="cart-footer-shell">
           <div className="cart-footer ui-surface-panel">
-            <div className="cart-footer__info" title={`${footerLabel}: ${formatBuyerRub(footerTotal)}`}>
+            <div className="cart-footer__info" title={`${displayFooterLabel}: ${formatBuyerRub(footerTotal)}`}>
               <div className="cart-footer__meta">
-                <span className="cart-footer__label">{footerLabel}</span>
+                <span className="cart-footer__label">{displayFooterLabel}</span>
               </div>
               <span className="cart-footer__sum">{formatBuyerRub(footerTotal)}</span>
             </div>
@@ -877,10 +907,11 @@ export default function Cart({ active }) {
               type="button"
               className={`cart-footer__submit cart-footer__submit--${footerMode} pressable`}
               onClick={handleSubmitSelected}
-              disabled={footerSubmitDisabled}
-              aria-label={footerActionText}
+              disabled={displayFooterSubmitDisabled}
+              aria-label={displayFooterActionText}
+              data-order-guide-step-six-target={isGuidePreview && footerMode === 'selected' ? 'cta' : undefined}
             >
-              <span className="cart-footer__submit-content">{footerActionText}</span>
+              <span className="cart-footer__submit-content">{displayFooterActionText}</span>
             </button>
           </div>
         </div>
@@ -907,7 +938,7 @@ export default function Cart({ active }) {
       <BottomSheet
         open={Boolean(detailItem)}
         onClose={handleCloseDetail}
-        badge={detailItem ? (PLATFORM_NAMES[detailItem.platform] || detailItem.platform || 'Товар') : null}
+        badge={null}
         title={detailTitle}
         subtitle={detailSizeText || ''}
         className="cart-detail-sheet"
@@ -1100,19 +1131,24 @@ export default function Cart({ active }) {
                 <div className="cart-detail__info-row">
                   <IconInfo size={14} />
                   <span>Курс: {detailData.exchange_rate.cny_rub?.toFixed(2)} ₽/¥</span>
-                  <span className="cart-detail__info-sub">{detailData.exchange_rate.age_human}</span>
                 </div>
               ) : null}
-              {detailData.delivery_time ? (
+              {detailDeliveryInfo.standard_days ? (
                 <div className="cart-detail__info-row">
                   <IconInfo size={14} />
-                  <span>Срок доставки: {detailData.delivery_time}</span>
+                  <span>Обычная доставка до Москвы: {detailDeliveryInfo.standard_days}</span>
                 </div>
               ) : null}
-              {detailData.next_shipment_date && detailData.next_shipment_date !== '00.00.0000' ? (
+              {detailDeliveryInfo.express_days ? (
                 <div className="cart-detail__info-row">
                   <IconInfo size={14} />
-                  <span>Ближайшая отправка: {detailData.next_shipment_date}</span>
+                  <span>Экспресс доставка до Москвы: {detailDeliveryInfo.express_days}</span>
+                </div>
+              ) : null}
+              {detailDeliveryInfo.cdek_days ? (
+                <div className="cart-detail__info-row">
+                  <IconInfo size={14} />
+                  <span>СДЭК по России: {detailDeliveryInfo.cdek_days}</span>
                 </div>
               ) : null}
             </div>
@@ -1205,7 +1241,7 @@ export default function Cart({ active }) {
 }
 
 
-function CartThumb({ calcJson, platform }) {
+function CartThumb({ calcJson }) {
   const [src, setSrc] = useState(null)
 
   useEffect(() => {
@@ -1220,11 +1256,12 @@ function CartThumb({ calcJson, platform }) {
   }, [calcJson])
 
   if (!src) {
-    const pColor = PLATFORM_COLORS[platform] || '#555'
-    const pShort = (PLATFORM_NAMES[platform] || '?').slice(0, 3).toUpperCase()
     return (
-      <div className="cart-card__thumb" style={{ color: pColor, borderColor: pColor + '30' }}>
-        {pShort}
+      <div
+        className="cart-card__thumb"
+        style={{ color: 'rgba(255, 255, 255, 0.45)', borderColor: 'rgba(var(--accent-rgb), 0.16)' }}
+      >
+        <IconPackage size={18} />
       </div>
     )
   }

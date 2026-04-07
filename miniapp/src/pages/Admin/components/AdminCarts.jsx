@@ -37,7 +37,7 @@ function getCartStatusMeta(item) {
 
   return {
     label: 'В корзине',
-    color: '#8b5cf6',
+    color: '#12efac',
   }
 }
 

@@ -1,22 +1,23 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import bannerChinaBuyer from '../../assets/banners/promo-china-buyer.webp'
-import bannerGetsuga from '../../assets/banners/promo-getsuga.webp'
-import { bootstrapWithInitData, fetchAdminShowcase, updateAdminShowcase } from '../../api/admin.js'
+import { bootstrapWithInitData, updateAdminShowcase } from '../../api/admin.js'
 import BottomSheet from '../../components/ui/BottomSheet'
 import FadeContent from '../../components/ui/FadeContent'
 import LightRays from '../../components/ui/LightRays'
 import LoadingGlyph from '../../components/ui/LoadingGlyph'
+import AboutDetailsSheet from '../../components/ui/AboutDetailsSheet'
+import OrderGuideSheet from '../../components/ui/OrderGuideSheet'
+import PromoBannerOverlay from '../../components/ui/PromoBannerOverlay'
 import ProductThumb from '../../components/ui/ProductThumb'
+import TextType from '../../components/ui/TextType'
+import BrandGemIcon from '../../components/ui/BrandGemIcon'
 import CalculatorShowcase from './CalculatorShowcase'
 import { resolveProductPriceState } from './priceState.js'
-import { getSearchUnavailablePlatform, resolveSearchPagination } from './searchPagination.js'
+import { resolveSearchPagination } from './searchPagination.js'
 import {
   IconArrowLeft,
-  IconCalculator,
   IconChevronDown,
   IconCheck,
-  IconExternalLink,
   IconInfo,
   IconLink,
   IconPackage,
@@ -33,14 +34,17 @@ import SpecsAccordion from '../../components/ui/SpecsAccordion'
 import StateSurface from '../../components/ui/StateSurface'
 import {
   formatBuyerCny,
-  formatBuyerNumber,
   formatBuyerRub,
 } from '../../constants/buyerNumbers'
-import { PLATFORM_COLORS, PLATFORM_NAMES } from '../../constants/platformMeta'
 import { BUYER_MOTION, BUYER_PRESS_SCALE } from '../../constants/buyerMotion'
 import { BUYER_STATE_COPY } from '../../constants/buyerStateContent'
 import { useTelegram } from '../../hooks/useTelegram'
 import { getImageSourceCandidates, proxyImageUrl } from '../../utils/media'
+import {
+  FALLBACK_PROMO_BANNERS,
+  normalizePromoBanner,
+} from '../../utils/promoBanners'
+import { getDeliverySettings } from '../../utils/deliveryPricing'
 import { shouldAllowFallbackVariantSelection } from '../../utils/productVariants'
 import { repairMojibakeDeep } from '../../utils/text'
 import './Calculator.css'
@@ -74,30 +78,9 @@ async function apiFetch(path, opts = {}, retries = 2) {
   }
 }
 
-const P_COLOR = { poizon: 'var(--accent)', taobao: '#ff6b35', '1688': '#e74c3c', unknown: '#555' }
-const P_NAME  = { poizon: 'Poizon', taobao: 'Taobao', '1688': '1688', unknown: 'Unknown' }
-const NAME_SEARCH_PLATFORMS = new Set(['poizon', 'taobao', '1688'])
-const NAME_SEARCH_PLATFORM_OPTIONS = [
-  { key: 'taobao', label: 'Taobao' },
-  { key: 'poizon', label: 'Poizon' },
-  { key: '1688', label: '1688' },
-]
-const SEARCH_UNAVAILABLE_SHEET_META = {
-  taobao: {
-    badge: 'Taobao',
-    title: 'Поиск временно недоступен',
-    subtitle: 'Попробуйте чуть позже',
-    text: 'Сейчас не можем показать результаты поиска по названию на Taobao.',
-    note: 'Вернитесь немного позже или откройте товар по ссылке, если она уже есть.',
-  },
-  '1688': {
-    badge: '1688',
-    title: 'Поиск временно недоступен',
-    subtitle: 'Попробуйте чуть позже',
-    text: 'Сейчас не можем показать результаты поиска по названию на 1688.',
-    note: 'Вернитесь немного позже или откройте товар по ссылке, если она уже есть.',
-  },
-}
+const POIZON_PLATFORM = 'poizon'
+const ORDER_GUIDE_AUTO_SELECT_SIZE_ALIASES = ['42', '10']
+const SIZE_GROUP_NAMES = ['size', 'размер', 'sz', 'taille', '尺码', '尺寸']
 const CALCULATOR_STATE_ICONS = {
   IconStateAlert,
   IconStateEmpty,
@@ -193,37 +176,16 @@ function SearchResultCardImage({ src, title }) {
 
 function normalizeNameSearchPlatform(value) {
   const normalized = String(value || '').trim().toLowerCase()
-  return NAME_SEARCH_PLATFORMS.has(normalized) ? normalized : ''
+  return normalized === POIZON_PLATFORM ? POIZON_PLATFORM : ''
 }
 
-function buildTaobaoResultUrl(item) {
-  const detailUrl = String(item?.detail_url || item?.url || '').trim()
-  if (detailUrl) {
-    return detailUrl
-  }
+function matchesOrderGuidePreferredSize(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return false
+  if (ORDER_GUIDE_AUTO_SELECT_SIZE_ALIASES.includes(normalized)) return true
 
-  const itemId = String(item?.item_id || item?.id || '').trim()
-  return itemId ? `https://item.taobao.com/item.htm?id=${itemId}` : ''
-}
-
-function build1688ResultUrl(item) {
-  const detailUrl = String(item?.detail_url || item?.url || '').trim()
-  if (detailUrl) {
-    return detailUrl
-  }
-
-  const itemId = String(item?.item_id || item?.offer_id || item?.offerId || item?.id || '').trim()
-  return itemId ? `https://detail.1688.com/offer/${itemId}.html` : ''
-}
-
-function buildMarketplaceResultUrl(item, platform) {
-  if (platform === 'taobao') {
-    return buildTaobaoResultUrl(item)
-  }
-  if (platform === '1688') {
-    return build1688ResultUrl(item)
-  }
-  return ''
+  const numericTokens = normalized.match(/\d+(?:[.,]\d+)?/g) || []
+  return numericTokens.some((token) => ORDER_GUIDE_AUTO_SELECT_SIZE_ALIASES.includes(token.replace(',', '.')))
 }
 
 function getSelectedOptionsText(product, selVariants, selSize) {
@@ -305,24 +267,486 @@ const MOCK_SEARCH_RESULTS = Array.from({ length: 15 }, (_, i) => ({
   image: null,
 }))
 
-const CALC_PROMO_BANNERS = [
-  {
-    image: bannerChinaBuyer,
-    href: 'https://t.me/getsuga0',
-    alt: 'China Buyer banner',
-    label: 'China Buyer',
-    tone: 'aqua',
+const CALC_PROMO_BANNERS = FALLBACK_PROMO_BANNERS.map((banner) => normalizePromoBanner(banner))
+
+const CALC_SEARCH_HINTS = ['【得物】得物er-X6J3M5V7发现一件好物...', 'Айфон 17 Pro...']
+const ORDER_GUIDE_LIVE_PREVIEW_SNAPSHOT = {
+  url: 'https://fast.dewu.com/router/product/ProductDetail?spuId=5631050&sourceName=shareDetail&outside_channel_type=0&share_platform_title=7&fromUserId=6441838e0d5af38cdf0c6da76686698d&skuId=628427964&propertyValueId=276554271&gSource=product&gContentId=5631050&gContentFlag=38&gType=1',
+  product_url: 'https://fast.dewu.com/router/product/ProductDetail?spuId=5631050&sourceName=shareDetail&outside_channel_type=0&share_platform_title=7&fromUserId=6441838e0d5af38cdf0c6da76686698d&skuId=628427964&propertyValueId=276554271&gSource=product&gContentId=5631050&gContentFlag=38&gType=1',
+  platform: 'poizon',
+  name: 'Nike Sb Janoski+ Lilac Medium Soft Pink',
+  brand: 'Nike',
+  price_cny: 205,
+  price_is_starting: false,
+  size: 'Purple / 38',
+  category: 'sneakers',
+  weight_kg: 1,
+  weight_estimated: true,
+  city: 'moscow',
+  delivery_type: 'standard',
+  image_url: 'https://cdn.poizon.com/pro-img/origin-img/20251205/702385d2d6294e90bcc78d1e2b0b5295.jpg',
+  extra_images: [
+    'https://cdn.poizon.com/pro-img/origin-img/20251205/280fe31acd52458c9355151416f11496.jpg',
+    'https://cdn.poizon.com/pro-img/origin-img/20251205/cbfbacad057c49debbe344505e397b89.jpg',
+    'https://cdn.poizon.com/pro-img/origin-img/20251205/803005a7e7bc43be8648326a3763388e.jpg',
+    'https://cdn.poizon.com/pro-img/origin-img/20251205/a3562fdaba394dde9e2c83325a3f2072.jpg',
+  ],
+  specs: {
+    Brand: 'Nike',
+    Series: 'DV5475-500',
+    Material: 'Замша',
+    Fit: 'All',
+    Season: 'весна, лето, осень, зима',
+    Category: 'Skateboard Shoes',
+    'Category L2': 'Trendy Sneakers & Casual Shoes',
+    'Category L1': 'Shoes',
+    'Release Date': '2023-08-14',
+    Barcode: '196606764153',
+    Sales: '66',
   },
-  {
-    image: bannerGetsuga,
-    href: 'https://t.me/KITAY_sofa',
-    alt: 'Getsuga banner',
-    label: 'Getsuga',
-    tone: 'rose',
+  available_sizes: ['36', '36.5', '37.5', '38', '38.5', '39', '40', '40.5', '41', '42', '42.5', '43', '44', '44.5', '45', '45.5', '46'],
+  variants: [
+    {
+      name: 'Size',
+      options: ['36', '36.5', '37.5', '38', '38.5', '39', '40', '40.5', '41', '42', '42.5', '43', '44', '44.5', '45', '45.5', '46'],
+    },
+  ],
+  variant_price_map: {
+    '[["Size", "36"]]': 327,
+    '[["Size", "36.5"]]': 317,
+    '[["Size", "37.5"]]': 327,
+    '[["Size", "38"]]': 205,
+    '[["Size", "38.5"]]': 259,
+    '[["Size", "39"]]': 327,
+    '[["Size", "40"]]': 497,
+    '[["Size", "40.5"]]': 697,
+    '[["Size", "41"]]': 328,
+    '[["Size", "42"]]': 323,
+    '[["Size", "42.5"]]': 327,
+    '[["Size", "43"]]': 388,
+    '[["Size", "44"]]': 367,
+    '[["Size", "44.5"]]': 518,
+    '[["Size", "45"]]': 597,
+    '[["Size", "45.5"]]': 577,
+    '[["Size", "46"]]': 597,
   },
-]
+  original_variants: [],
+  notes: '',
+  subtotal_rub: 3596.8605,
+  total_with_margin_rub: 3596.8605,
+  breakdown: [
+    { label: 'Товар', amount_rub: 2346.8605, note: '205 ¥ × 11.45' },
+    { label: 'Комиссия (10%)', amount_rub: 250, note: 'мин. 250 ₽' },
+    { label: 'Доставка до Москвы', amount_rub: 1000, note: 'Обычная до Москвы • ~2 × 500 г' },
+  ],
+  exchange_rate: {
+    cny_rub: 11.4481,
+    usd_rub: 78.7277,
+    eur_rub: 91.0034,
+    updated_at: '2026-04-07T18:21:59.554086',
+    age_seconds: 919.373111,
+    age_human: '15 мин. назад',
+    source: 'cbr',
+  },
+  delivery_info: {
+    standard_days: '3-4 недели',
+    express_days: '5-10 дней',
+    cdek_days: '2-5 дней',
+    includes_note: 'В стоимость доставки входят облицовка и страховка.',
+    payment_note: 'Доставка оплачивается при получении.',
+  },
+}
 
 /* ════════════════════════════════════════════════════════════════ */
+const ORDER_GUIDE_STEP_SIX_PREVIEW_SETTING_KEY = 'order_guide_step_six_preview'
+const ORDER_GUIDE_STEP_EIGHT_PREVIEW_SETTING_KEY = 'order_guide_step_eight_preview'
+const ORDER_GUIDE_CART_PREVIEW_SELECTED_ITEM_ID = 'order-guide-step-six-item-3'
+const ORDER_GUIDE_ORDERS_PREVIEW_ITEM_ID = 'order-guide-step-eight-item-1'
+
+function buildOrderGuideCartPreviewItem({
+  id,
+  shortName,
+  name,
+  size,
+  priceRub,
+  imageUrl,
+}) {
+  return {
+    id,
+    short_name: shortName,
+    name,
+    size,
+    subtotal_rub: priceRub,
+    total_with_margin_rub: priceRub,
+    calc_json: JSON.stringify({
+      image_url: imageUrl,
+      product: {
+        name,
+        image_url: imageUrl,
+      },
+    }),
+    in_order: 0,
+    order_submitted: 0,
+    paid: 0,
+    shipped: 0,
+    arrived: 0,
+  }
+}
+
+const ORDER_GUIDE_CART_PREVIEW = {
+  items: [
+    buildOrderGuideCartPreviewItem({
+      id: 'order-guide-step-six-item-1',
+      shortName: 'ALORGEEK T-Shirt',
+      name: 'ALORGEEK T Shirts Unisex Crew Neck Moderate Straight Fit',
+      size: 'Apricot / L',
+      priceRub: 1196.4759,
+      imageUrl: 'https://cdn.poizon.com/pro-img/origin-img/20250312/e1ed99bb50e44546916e90394b66e913.jpg',
+    }),
+    buildOrderGuideCartPreviewItem({
+      id: 'order-guide-step-six-item-2',
+      shortName: 'DIOR Perfume Set',
+      name: 'DIOR Men\'s Perfume Sample, Woody Fougere 10ml Birthday Gift For Girlfriend',
+      size: '10ml*8 / Shopping Bag Not Included',
+      priceRub: 8055.745999999999,
+      imageUrl: 'https://cdn.poizon.com/pro-img/origin-img/20250312/b74f5bd0fa294700bfaefcc7e3c2c6d4.jpg',
+    }),
+    buildOrderGuideCartPreviewItem({
+      id: ORDER_GUIDE_CART_PREVIEW_SELECTED_ITEM_ID,
+      shortName: 'Nike Sb Janoski+',
+      name: 'Nike Sb Janoski+ Lilac Medium Soft Pink',
+      size: '42',
+      priceRub: 5067.50993,
+      imageUrl: 'https://cdn.poizon.com/pro-img/origin-img/20251205/702385d2d6294e90bcc78d1e2b0b5295.jpg',
+    }),
+    buildOrderGuideCartPreviewItem({
+      id: 'order-guide-step-six-item-4',
+      shortName: 'Alexander McQueen',
+      name: 'Alexander McQueen Oversized Lace Up Sneakers Women\'s',
+      size: '36 / Original Shoe Box Not Included',
+      priceRub: 50970.288905,
+      imageUrl: 'https://cdn.poizon.com/pro-img/origin-img/20251217/e1b8757a474f4b499ca3f064e8921af1.jpg',
+    }),
+    buildOrderGuideCartPreviewItem({
+      id: 'order-guide-step-six-item-5',
+      shortName: 'Nike Dunk Low Cacao',
+      name: 'Nike Dunk Low Cacao Wow Women\'s',
+      size: '43',
+      priceRub: 10072.16,
+      imageUrl: 'https://cdn.poizon.com/pro-img/origin-img/20251206/6c8447a89bc24797a6429732cc71ab5d.jpg',
+    }),
+  ],
+  selectedIds: [ORDER_GUIDE_CART_PREVIEW_SELECTED_ITEM_ID],
+  footerActionText: '\u0412 \u0437\u0430\u044f\u0432\u043a\u0443',
+}
+
+function normalizeOrderGuideCartPreviewItem(item, index) {
+  if (!item || typeof item !== 'object') {
+    return null
+  }
+
+  const fallbackItem = ORDER_GUIDE_CART_PREVIEW.items[index] || ORDER_GUIDE_CART_PREVIEW.items[0]
+  const id = typeof item.id === 'string' || typeof item.id === 'number'
+    ? item.id
+    : (fallbackItem?.id || `order-guide-step-six-item-${index + 1}`)
+  const subtotalRub = Number(item.subtotal_rub)
+  const totalWithMarginRub = Number(item.total_with_margin_rub)
+  const calcJson = typeof item.calc_json === 'string'
+    ? item.calc_json
+    : item.calc_json && typeof item.calc_json === 'object'
+      ? JSON.stringify(item.calc_json)
+      : (fallbackItem?.calc_json || '')
+
+  return {
+    id,
+    short_name: typeof item.short_name === 'string' && item.short_name.trim()
+      ? item.short_name
+      : (fallbackItem?.short_name || ''),
+    name: typeof item.name === 'string' && item.name.trim()
+      ? item.name
+      : (fallbackItem?.name || ''),
+    size: typeof item.size === 'string' ? item.size : (fallbackItem?.size || ''),
+    subtotal_rub: Number.isFinite(subtotalRub)
+      ? subtotalRub
+      : (Number.isFinite(totalWithMarginRub) ? totalWithMarginRub : (fallbackItem?.subtotal_rub || 0)),
+    total_with_margin_rub: Number.isFinite(totalWithMarginRub)
+      ? totalWithMarginRub
+      : (Number.isFinite(subtotalRub) ? subtotalRub : (fallbackItem?.total_with_margin_rub || 0)),
+    calc_json: calcJson,
+    in_order: item.in_order ? 1 : 0,
+    order_submitted: item.order_submitted ? 1 : 0,
+    paid: item.paid ? 1 : 0,
+    shipped: item.shipped ? 1 : 0,
+    arrived: item.arrived ? 1 : 0,
+  }
+}
+
+function normalizeOrderGuideCartPreview(preview) {
+  if (!preview || typeof preview !== 'object') {
+    return ORDER_GUIDE_CART_PREVIEW
+  }
+
+  const items = Array.isArray(preview.items)
+    ? preview.items
+      .map((item, index) => normalizeOrderGuideCartPreviewItem(item, index))
+      .filter(Boolean)
+    : []
+
+  if (!items.length) {
+    return ORDER_GUIDE_CART_PREVIEW
+  }
+
+  const selectedIds = Array.isArray(preview.selectedIds)
+    ? preview.selectedIds.filter((candidateId) => items.some((item) => item.id === candidateId))
+    : []
+  const fallbackSelectedId = items[2]?.id ?? items[items.length - 1]?.id ?? null
+
+  return {
+    items,
+    selectedIds: selectedIds.length
+      ? selectedIds
+      : (fallbackSelectedId != null ? [fallbackSelectedId] : []),
+    footerActionText: typeof preview.footerActionText === 'string' && preview.footerActionText.trim()
+      ? preview.footerActionText
+      : ORDER_GUIDE_CART_PREVIEW.footerActionText,
+    ...(typeof preview.footerLabel === 'string' && preview.footerLabel.trim()
+      ? { footerLabel: preview.footerLabel }
+      : {}),
+  }
+}
+
+function parseOrderGuideCartPreviewSetting(rawValue) {
+  if (typeof rawValue !== 'string' || !rawValue.trim()) {
+    return ORDER_GUIDE_CART_PREVIEW
+  }
+
+  try {
+    return normalizeOrderGuideCartPreview(JSON.parse(rawValue))
+  } catch {
+    return ORDER_GUIDE_CART_PREVIEW
+  }
+}
+
+function buildOrderGuideOrdersPreviewItem({
+  id,
+  shortName,
+  name,
+  size,
+  priceCny,
+  weightKg,
+  weightEstimated,
+  subtotalRub,
+  imageUrl,
+}) {
+  return {
+    id,
+    short_name: shortName,
+    name,
+    size,
+    price_cny: priceCny,
+    weight_kg: weightKg,
+    weight_estimated: weightEstimated,
+    subtotal_rub: subtotalRub,
+    total_with_margin_rub: subtotalRub,
+    calc_json: JSON.stringify({
+      image_url: imageUrl,
+      product: {
+        name,
+        price_cny: priceCny,
+        weight_kg: weightKg,
+        weight_estimated: weightEstimated,
+        image_url: imageUrl,
+      },
+    }),
+    in_order: 1,
+    order_submitted: 0,
+    paid: 0,
+    shipped: 0,
+    arrived: 0,
+  }
+}
+
+const ORDER_GUIDE_ORDERS_PREVIEW_PRICING_SETTINGS = {
+  commission_pct: '10.0',
+  min_commission_rub: '250.0',
+  delivery_air_moscow_rub_500g: '1500.0',
+  delivery_standard_moscow_rub_500g: '500.0',
+  delivery_cdek_russia_rub_500g: '500.0',
+  delivery_air_moscow_days: '5-10 дней',
+  delivery_standard_moscow_days: '3-4 недели',
+  delivery_cdek_russia_days: '2-5 дней',
+}
+
+const ORDER_GUIDE_ORDERS_PREVIEW = {
+  items: [
+    buildOrderGuideOrdersPreviewItem({
+      id: ORDER_GUIDE_ORDERS_PREVIEW_ITEM_ID,
+      shortName: 'Nike Sb Janoski кеды',
+      name: 'Nike Sb Janoski+ Lilac Medium Soft Pink',
+      size: '42',
+      priceCny: 323,
+      weightKg: 1,
+      weightEstimated: true,
+      subtotalRub: 5067.50993,
+      imageUrl: 'https://cdn.poizon.com/pro-img/origin-img/20251205/702385d2d6294e90bcc78d1e2b0b5295.jpg',
+    }),
+  ],
+  deliveryStatus: {
+    isComplete: true,
+    deliveryData: {
+      recipient_name: 'Денис Рыжов',
+      phone: '+79510204901',
+      city: 'Владивосток',
+      street: 'Жуковского',
+      house: '13',
+      apartment: '123',
+      comment: 'Привет',
+    },
+    updatedAt: '2026-03-25 02:38:53',
+  },
+  pricingState: {
+    adminSettings: ORDER_GUIDE_ORDERS_PREVIEW_PRICING_SETTINGS,
+    deliveryInfo: {
+      standard_days: ORDER_GUIDE_ORDERS_PREVIEW_PRICING_SETTINGS.delivery_standard_moscow_days,
+      express_days: ORDER_GUIDE_ORDERS_PREVIEW_PRICING_SETTINGS.delivery_air_moscow_days,
+      cdek_days: ORDER_GUIDE_ORDERS_PREVIEW_PRICING_SETTINGS.delivery_cdek_russia_days,
+    },
+    rateRubPerCny: 11.4481,
+  },
+  deliveryType: 'standard',
+}
+
+function normalizeOrderGuideOrdersPreviewItem(item, index) {
+  if (!item || typeof item !== 'object') {
+    return null
+  }
+
+  const fallbackItem = ORDER_GUIDE_ORDERS_PREVIEW.items[index] || ORDER_GUIDE_ORDERS_PREVIEW.items[0]
+  const priceCny = Number(item.price_cny)
+  const weightKg = Number(item.weight_kg)
+  const subtotalRub = Number(item.subtotal_rub)
+  const totalWithMarginRub = Number(item.total_with_margin_rub)
+  const calcJson = typeof item.calc_json === 'string'
+    ? item.calc_json
+    : item.calc_json && typeof item.calc_json === 'object'
+      ? JSON.stringify(item.calc_json)
+      : (fallbackItem?.calc_json || '')
+
+  return {
+    id: typeof item.id === 'string' || typeof item.id === 'number'
+      ? item.id
+      : (fallbackItem?.id || ORDER_GUIDE_ORDERS_PREVIEW_ITEM_ID),
+    short_name: typeof item.short_name === 'string' && item.short_name.trim()
+      ? item.short_name
+      : (fallbackItem?.short_name || ''),
+    name: typeof item.name === 'string' && item.name.trim()
+      ? item.name
+      : (fallbackItem?.name || ''),
+    size: typeof item.size === 'string' ? item.size : (fallbackItem?.size || ''),
+    price_cny: Number.isFinite(priceCny) ? priceCny : (fallbackItem?.price_cny || 0),
+    weight_kg: Number.isFinite(weightKg) ? weightKg : (fallbackItem?.weight_kg || 0),
+    weight_estimated: typeof item.weight_estimated === 'boolean'
+      ? item.weight_estimated
+      : Boolean(fallbackItem?.weight_estimated),
+    subtotal_rub: Number.isFinite(subtotalRub)
+      ? subtotalRub
+      : (Number.isFinite(totalWithMarginRub) ? totalWithMarginRub : (fallbackItem?.subtotal_rub || 0)),
+    total_with_margin_rub: Number.isFinite(totalWithMarginRub)
+      ? totalWithMarginRub
+      : (Number.isFinite(subtotalRub) ? subtotalRub : (fallbackItem?.total_with_margin_rub || 0)),
+    calc_json: calcJson,
+    in_order: item.in_order ? 1 : 0,
+    order_submitted: item.order_submitted ? 1 : 0,
+    paid: item.paid ? 1 : 0,
+    shipped: item.shipped ? 1 : 0,
+    arrived: item.arrived ? 1 : 0,
+  }
+}
+
+function normalizeOrderGuideOrdersPreview(preview) {
+  if (!preview || typeof preview !== 'object') {
+    return ORDER_GUIDE_ORDERS_PREVIEW
+  }
+
+  const items = Array.isArray(preview.items)
+    ? preview.items
+      .map((item, index) => normalizeOrderGuideOrdersPreviewItem(item, index))
+      .filter(Boolean)
+    : []
+
+  const normalizedItems = items.length ? [items[0]] : ORDER_GUIDE_ORDERS_PREVIEW.items
+  const deliveryStatus = preview.deliveryStatus && typeof preview.deliveryStatus === 'object'
+    ? preview.deliveryStatus
+    : {}
+  const deliveryData = deliveryStatus.deliveryData && typeof deliveryStatus.deliveryData === 'object'
+    ? deliveryStatus.deliveryData
+    : {}
+  const pricingState = preview.pricingState && typeof preview.pricingState === 'object'
+    ? preview.pricingState
+    : {}
+  const pricingAdminSettings = pricingState.adminSettings && typeof pricingState.adminSettings === 'object'
+    ? pricingState.adminSettings
+    : {}
+  const pricingDeliveryInfo = pricingState.deliveryInfo && typeof pricingState.deliveryInfo === 'object'
+    ? pricingState.deliveryInfo
+    : {}
+  const rateRubPerCny = Number(pricingState.rateRubPerCny)
+
+  return {
+    items: normalizedItems,
+    deliveryStatus: {
+      isComplete: typeof deliveryStatus.isComplete === 'boolean'
+        ? deliveryStatus.isComplete
+        : ORDER_GUIDE_ORDERS_PREVIEW.deliveryStatus.isComplete,
+      deliveryData: {
+        ...ORDER_GUIDE_ORDERS_PREVIEW.deliveryStatus.deliveryData,
+        ...deliveryData,
+      },
+      updatedAt: typeof deliveryStatus.updatedAt === 'string' && deliveryStatus.updatedAt.trim()
+        ? deliveryStatus.updatedAt
+        : ORDER_GUIDE_ORDERS_PREVIEW.deliveryStatus.updatedAt,
+    },
+    pricingState: {
+      adminSettings: {
+        ...ORDER_GUIDE_ORDERS_PREVIEW.pricingState.adminSettings,
+        ...pricingAdminSettings,
+      },
+      deliveryInfo: {
+        ...ORDER_GUIDE_ORDERS_PREVIEW.pricingState.deliveryInfo,
+        ...pricingDeliveryInfo,
+      },
+      rateRubPerCny: Number.isFinite(rateRubPerCny)
+        ? rateRubPerCny
+        : ORDER_GUIDE_ORDERS_PREVIEW.pricingState.rateRubPerCny,
+    },
+    deliveryType: typeof preview.deliveryType === 'string' && preview.deliveryType.trim()
+      ? preview.deliveryType
+      : ORDER_GUIDE_ORDERS_PREVIEW.deliveryType,
+  }
+}
+
+function parseOrderGuideOrdersPreviewSetting(rawValue) {
+  if (typeof rawValue !== 'string' || !rawValue.trim()) {
+    return ORDER_GUIDE_ORDERS_PREVIEW
+  }
+
+  try {
+    return normalizeOrderGuideOrdersPreview(JSON.parse(rawValue))
+  } catch {
+    return ORDER_GUIDE_ORDERS_PREVIEW
+  }
+}
+
+const ORDER_GUIDE_LIVE_PREVIEW_PRODUCT_URL = String(ORDER_GUIDE_LIVE_PREVIEW_SNAPSHOT.product_url || '').trim().toLowerCase()
+const ORDER_GUIDE_LIVE_PREVIEW_NAME = String(ORDER_GUIDE_LIVE_PREVIEW_SNAPSHOT.name || '').trim().toLowerCase()
+
+function isOrderGuideLivePreviewEntry(item) {
+  const candidateUrl = String(item?.product_url || item?.url || '').trim().toLowerCase()
+  const candidateName = String(item?.name || '').trim().toLowerCase()
+
+  return candidateUrl === ORDER_GUIDE_LIVE_PREVIEW_PRODUCT_URL || candidateName === ORDER_GUIDE_LIVE_PREVIEW_NAME
+}
+
 const CALC_CURATED_SHOWCASE_PRODUCTS = [
   // Add pinned products here when you want the home showcase to use a fixed selection.
   // Example:
@@ -338,14 +762,15 @@ const CALC_CURATED_SHOWCASE_PRODUCTS = [
   // },
 ]
 
-const SHOWCASE_DEFAULT_ACCENT = 'var(--accent)'
+const SHOWCASE_DEFAULT_ACCENT = 'var(--poizon-blue)'
+const SHOWCASE_SOURCE_LABEL = 'Poizon'
 const SHOWCASE_EDITOR_SECTIONS = [
   { id: 'top', title: 'Верхний ряд', start: 0, end: 5 },
   { id: 'bottom', title: 'Нижний ряд', start: 5, end: 10 },
 ]
 
-function getShowcaseAccent(platform) {
-  return PLATFORM_COLORS[platform] || SHOWCASE_DEFAULT_ACCENT
+function getShowcaseAccent() {
+  return SHOWCASE_DEFAULT_ACCENT
 }
 
 function buildShowcaseProductNote(product) {
@@ -369,9 +794,9 @@ function _buildCuratedShowcaseProducts() {
       priceLabel: item.priceLabel
         || (typeof item.totalRub === 'number' ? formatBuyerRub(item.totalRub) : '')
         || (typeof item.priceCny === 'number' ? formatBuyerCny(item.priceCny) : ''),
-      sourceLabel: item.sourceLabel || PLATFORM_NAMES[item.platform] || 'Featured',
+      sourceLabel: item.sourceLabel || SHOWCASE_SOURCE_LABEL,
       note: item.note || '',
-      accentColor: item.accentColor || getShowcaseAccent(item.platform),
+      accentColor: item.accentColor || getShowcaseAccent(),
       productData: item.productData || null,
       href: item.href || '',
     }))
@@ -396,7 +821,6 @@ function _buildHistoryShowcaseProducts(items) {
     })
     .map((item, index) => {
       const totalRub = item.subtotal_rub || item.total_with_margin_rub || 0
-      const platformLabel = PLATFORM_NAMES[item.platform] || item.platform || 'Товар'
       const note = item.size ? `Размер ${item.size}` : (item.brand || '')
 
       return {
@@ -406,9 +830,9 @@ function _buildHistoryShowcaseProducts(items) {
         priceLabel: totalRub > 0
           ? formatBuyerRub(totalRub)
           : (typeof item.price_cny === 'number' ? formatBuyerCny(item.price_cny) : ''),
-        sourceLabel: platformLabel,
+        sourceLabel: SHOWCASE_SOURCE_LABEL,
         note,
-        accentColor: getShowcaseAccent(item.platform),
+        accentColor: getShowcaseAccent(),
         sourceData: item,
       }
     })
@@ -450,9 +874,6 @@ function buildManagedShowcaseProducts(items) {
   return items
     .map((item) => {
       const product = item?.product || {}
-      const platform = product.platform || 'poizon'
-      const sourceLabel = PLATFORM_NAMES[platform] || platform || 'Товар'
-
       return {
         id: `managed-showcase-${item?.slot || product.url || product.name || 'item'}`,
         slot: Number(item?.slot) || null,
@@ -461,15 +882,41 @@ function buildManagedShowcaseProducts(items) {
         priceLabel: typeof item?.subtotal_rub === 'number' && Number.isFinite(item.subtotal_rub)
           ? formatBuyerRub(item.subtotal_rub)
           : formatProductCnyLabel(product),
-        sourceLabel,
+        sourceLabel: SHOWCASE_SOURCE_LABEL,
         note: buildShowcaseProductNote(product),
-        accentColor: getShowcaseAccent(platform),
+        accentColor: getShowcaseAccent(),
         sourceData: product,
         href: item?.url || product.url || '',
       }
     })
     .filter((item) => item.name)
     .slice(0, 10)
+}
+
+function normalizeAboutDetailsSlides(items) {
+  if (!Array.isArray(items)) {
+    return null
+  }
+
+  const normalizedSlides = (Array.isArray(items) ? items : [])
+    .map((item, index) => {
+      const slot = Number(item?.slot) || index + 1
+      const imageSrc = String(item?.image_url || '').trim()
+      const imageAlt = String(item?.image_alt || `Слайд ${slot}`).trim() || `Слайд ${slot}`
+
+      if (!imageSrc) {
+        return null
+      }
+
+      return {
+        id: slot,
+        imageSrc,
+        imageAlt,
+      }
+    })
+    .filter(Boolean)
+
+  return normalizedSlides
 }
 
 function buildShowcaseEditorSlots(links, items) {
@@ -485,16 +932,14 @@ function buildShowcaseEditorSlots(links, items) {
     const slot = index + 1
     const showcaseItem = itemBySlot.get(slot) || null
     const product = showcaseItem?.product || null
-    const platform = product?.platform || 'poizon'
-
     return {
       slot,
       url,
       normalizedUrl: extractShowcaseInputUrl(url),
       product,
       occupied: Boolean(url),
-      accentColor: getShowcaseAccent(platform),
-      sourceLabel: PLATFORM_NAMES[platform] || platform || 'Товар',
+      accentColor: getShowcaseAccent(),
+      sourceLabel: SHOWCASE_SOURCE_LABEL,
       priceLabel: typeof showcaseItem?.subtotal_rub === 'number' && Number.isFinite(showcaseItem.subtotal_rub)
         ? formatBuyerRub(showcaseItem.subtotal_rub)
         : formatProductCnyLabel(product),
@@ -508,22 +953,8 @@ function buildShowcaseUpdatePayloadFromSlots(slots) {
   return Array.from({ length: 10 }, (_, index) => String(slots?.[index]?.url || ''))
 }
 
-function getDefaultShowcaseSlotSelection(slots) {
-  const safeSlots = Array.isArray(slots) ? slots : []
-  const emptySlot = safeSlots.find((slot) => !slot.occupied)
-  if (emptySlot) {
-    return { slot: emptySlot.slot, input: '' }
-  }
-
-  const firstSlot = safeSlots[0]
-  return {
-    slot: firstSlot?.slot || 1,
-    input: firstSlot?.url || '',
-  }
-}
-
 const Calculator = forwardRef(function Calculator({ onCartChange, active = false }, ref) {
-  const { userId, firstName, haptic, hideKeyboard, initData } = useTelegram()
+  const { userId, firstName, haptic, hideKeyboard, initData, tg } = useTelegram()
   const prefersReducedMotion = useReducedMotion()
 
   const greeting = (() => {
@@ -535,7 +966,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   })()
 
   const [step, setStep] = useState(_MOCK_STEP === 'product' || _MOCK_STEP === 'search-results' ? _MOCK_STEP : 'idle')
-  const [url, setUrl] = useState('')
+  const [searchInput, setSearchInput] = useState(_MOCK_STEP === 'search-results' ? 'Nike Dunk Low' : '')
+  const [searchInputFocused, setSearchInputFocused] = useState(false)
   const [product, setProduct] = useState(_MOCK_STEP === 'product' ? MOCK_PRODUCT : null)
   const [result, setResult] = useState(_MOCK_STEP === 'product' ? MOCK_RESULT : null)
   const [calcLoading, setCalcLoading] = useState(false)
@@ -553,18 +985,22 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const addedCartUrlRef = useRef(null)
   const addToCartSuccessRef = useRef(null)
   const idlePageRef = useRef(null)
+  const productScrollRef = useRef(null)
+  const orderGuideAutoScrollFrameRef = useRef(0)
   const [loadingMode, setLoadingMode] = useState('product')
   const [loadingText, setLoadingText] = useState('')
   const [specsOpen, setSpecsOpen] = useState(false)
   const [adminSettings, setAdminSettings] = useState(null)
 
-  /* ── compare state ── */
-  const [compareOpen, setCompareOpen] = useState(false)
-  const [compareData, setCompareData] = useState(null)
-  const [compareMarket, setCompareMarket] = useState(null)
-  const [compareLoadingText, setCompareLoadingText] = useState('')
-  const [compareShowAll, setCompareShowAll] = useState(false)
+  /* ── home promo state ── */
+  const [promoBanners, setPromoBanners] = useState(() => CALC_PROMO_BANNERS)
+  const [aboutDetailsSlides, setAboutDetailsSlides] = useState(null)
   const [promoSlideIndex, setPromoSlideIndex] = useState(0)
+  const [promoModalBannerId, setPromoModalBannerId] = useState(0)
+  const [promoEntryBannerId, setPromoEntryBannerId] = useState(0)
+  const [aboutDetailsOpen, setAboutDetailsOpen] = useState(false)
+  const [orderGuideOpen, setOrderGuideOpen] = useState(false)
+  const [orderGuideStep, setOrderGuideStep] = useState(1)
 
   /* ── search state ── */
   const [searchQuery, setSearchQuery] = useState(_MOCK_STEP === 'search-results' ? 'Nike Dunk Low' : '')
@@ -572,27 +1008,33 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchLoadingMore, setSearchLoadingMore] = useState(false)
   const [searchError, setSearchError] = useState(null)
-  const [searchPlatform, setSearchPlatform] = useState('')
-  const [activeSearchPlatform, setActiveSearchPlatform] = useState('')
   const [searchResultOpenError, setSearchResultOpenError] = useState(null)
   const [searchResults, setSearchResults] = useState(_MOCK_STEP === 'search-results' ? MOCK_SEARCH_RESULTS : [])
   const [searchRate, setSearchRate] = useState(_MOCK_STEP === 'search-results' ? 13.20 : null)
   const [searchHasMore, setSearchHasMore] = useState(false)
   const [searchNextStartId, setSearchNextStartId] = useState(0)
-  const [searchUnavailablePlatform, setSearchUnavailablePlatform] = useState('')
   const [showcaseProducts, setShowcaseProducts] = useState([])
-  const [isAdminViewer, setIsAdminViewer] = useState(false)
+  const [, setIsAdminViewer] = useState(false)
   const [showcaseEditorOpen, setShowcaseEditorOpen] = useState(false)
-  const [showcaseEditorLoading, setShowcaseEditorLoading] = useState(false)
+  const [showcaseEditorLoading] = useState(false)
   const [showcaseEditorSaving, setShowcaseEditorSaving] = useState(false)
   const [showcaseEditorError, setShowcaseEditorError] = useState('')
   const [showcaseEditorSlotErrors, setShowcaseEditorSlotErrors] = useState({})
   const [showcaseEditorSlots, setShowcaseEditorSlots] = useState(() => buildShowcaseEditorSlots([], []))
   const [showcaseEditorActiveSlot, setShowcaseEditorActiveSlot] = useState(1)
   const [showcaseEditorInput, setShowcaseEditorInput] = useState('')
+  const [orderGuideLivePreviewData, setOrderGuideLivePreviewData] = useState(ORDER_GUIDE_LIVE_PREVIEW_SNAPSHOT)
+  const [orderGuideCartPreview, setOrderGuideCartPreview] = useState(ORDER_GUIDE_CART_PREVIEW)
+  const [orderGuideOrdersPreview, setOrderGuideOrdersPreview] = useState(ORDER_GUIDE_ORDERS_PREVIEW)
   const promoTouchRef = useRef({ x: 0, y: 0, moved: false })
+  const promoEntryShownRef = useRef(false)
   const showcaseFocusTimeoutsRef = useRef([])
   const showcaseEditorInputRef = useRef(null)
+  const parseProductRequestIdRef = useRef(0)
+  const skipNextAutoCalculateRef = useRef(false)
+  const orderGuideIdleSearchInputRef = useRef('')
+  const orderGuideLivePreviewTriggeredRef = useRef(false)
+  const orderGuideLivePreviewFetchIdRef = useRef(0)
 
   const activeShowcaseEditorSlot = showcaseEditorSlots.find((slot) => slot.slot === showcaseEditorActiveSlot) || showcaseEditorSlots[0] || null
   const showcaseEditorInputUrl = extractShowcaseInputUrl(showcaseEditorInput)
@@ -610,9 +1052,120 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     && showcaseEditorInputUrl === activeShowcaseEditorSlot.normalizedUrl,
   )
 
+  const openPersistedCalculation = useCallback((data) => {
+    const nextProduct = {
+      url: data?.product_url || data?.url || '',
+      platform: data?.platform || 'poizon',
+      name: data?.name || '',
+      brand: data?.brand || '',
+      price_cny: data?.price_cny,
+      price_is_starting: Boolean(data?.price_is_starting),
+      size: data?.size || '',
+      category: data?.category || '',
+      weight_kg: data?.weight_kg ?? null,
+      weight_estimated: Boolean(data?.weight_estimated),
+      city: data?.city || '',
+      delivery_type: data?.delivery_type || '',
+      image_url: data?.image_url || '',
+      extra_images: Array.isArray(data?.extra_images) ? data.extra_images : [],
+      specs: data?.specs || {},
+      available_sizes: Array.isArray(data?.available_sizes) ? data.available_sizes : [],
+      variants: Array.isArray(data?.variants) ? data.variants : [],
+      variant_price_map: data?.variant_price_map || {},
+      original_variants: Array.isArray(data?.original_variants) ? data.original_variants : [],
+      notes: data?.notes || '',
+      auto_detected: [],
+    }
+
+    const nextBreakdown = Array.isArray(data?.breakdown)
+      ? data.breakdown
+        .map((row) => ({
+          label: row?.label || '',
+          amount_rub: Number(row?.amount_rub || 0),
+          note: row?.note || '',
+        }))
+        .filter((row) => row.label)
+      : []
+
+    const subtotalRub = Number(data?.subtotal_rub || data?.total_with_margin_rub || 0)
+    const totalWithMarginRub = Number(data?.total_with_margin_rub || data?.subtotal_rub || 0)
+    const nextResult = subtotalRub > 0 || nextBreakdown.length
+      ? {
+          subtotal_rub: subtotalRub,
+          total_with_margin_rub: totalWithMarginRub,
+          breakdown: nextBreakdown,
+          exchange_rate: data?.exchange_rate || (rate?.cny_rub ? { cny_rub: rate.cny_rub } : null),
+          delivery_info: data?.delivery_info || null,
+        }
+      : null
+
+    skipNextAutoCalculateRef.current = Boolean(nextResult)
+    setProduct(nextProduct)
+    setActiveImg(0)
+    setSelVariants({})
+    setSelSize('')
+    setManualPrice('')
+    setResult(nextResult)
+    setSavedCalcId(data?.calc_id || data?.id || null)
+    setAddedToCart(false)
+    addedCartUrlRef.current = null
+    setSpecsOpen(false)
+    setSearchResults([])
+    setStep('product')
+  }, [rate])
+
+  const resetOrderGuideLivePreviewRuntime = useCallback(() => {
+    parseProductRequestIdRef.current += 1
+    skipNextAutoCalculateRef.current = false
+    orderGuideLivePreviewTriggeredRef.current = false
+  }, [])
+
+  const resetOrderGuidePreviewSelectionState = useCallback(() => {
+    setSelVariants({})
+    setSelSize('')
+    setAddedToCart(false)
+    addedCartUrlRef.current = null
+    setSavedCalcId(null)
+  }, [])
+
+  const restoreOrderGuideIdleState = useCallback(() => {
+    setSearchInput(orderGuideIdleSearchInputRef.current)
+    setSearchInputFocused(false)
+    setSearchQuery('')
+    setProduct(null)
+    setResult(null)
+    setCalcLoading(false)
+    setError(null)
+    setLoadingMode('product')
+    setLoadingText('')
+    setActiveImg(0)
+    setSelVariants({})
+    setSelSize('')
+    setManualPrice('')
+    setSavedCalcId(null)
+    setAddedToCart(false)
+    addedCartUrlRef.current = null
+    setSpecsOpen(false)
+    setSearchError(null)
+    setSearchResultOpenError(null)
+    setSearchResults([])
+    setSearchLoading(false)
+    setSearchLoadingMore(false)
+    setSearchHasMore(false)
+    setSearchNextStartId(0)
+    setStep('idle')
+  }, [])
+
   const clearShowcaseFocusTimers = useCallback(() => {
     showcaseFocusTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId))
     showcaseFocusTimeoutsRef.current = []
+  }, [])
+
+  const cancelOrderGuideAutoScroll = useCallback(() => {
+    if (orderGuideAutoScrollFrameRef.current) {
+      window.cancelAnimationFrame(orderGuideAutoScrollFrameRef.current)
+      orderGuideAutoScrollFrameRef.current = 0
+    }
   }, [])
 
   const dismissShowcaseKeyboard = useCallback(() => {
@@ -658,47 +1211,48 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   /* featuredIdx removed — grid-only mode */
 
   /* ── imperative handle for opening product from History ── */
-  useImperativeHandle(ref, () => ({
-    openProduct(data) {
-      const d = {
-        url: data.product_url || '',
-        platform: data.platform || 'poizon',
-        name: data.name || '',
-        brand: data.brand || '',
-        price_cny: data.price_cny,
-        price_is_starting: Boolean(data.price_is_starting),
-        size: data.size || '',
-        category: data.category || '',
-        weight_kg: null,
-        weight_estimated: false,
-        city: data.city || '',
-        delivery_type: data.delivery_type || '',
-        image_url: data.image_url || '',
-        extra_images: data.extra_images || [],
-        specs: data.specs || {},
-        available_sizes: data.available_sizes || [],
-        variants: data.variants || [],
-        variant_price_map: data.variant_price_map || {},
-        original_variants: [],
-        notes: '',
-        auto_detected: [],
-      }
-      setProduct(d)
-      setActiveImg(0)
-      setSelVariants({})
-      setSelSize('')
-      setManualPrice('')
-      setResult(null)
-      setSavedCalcId(null)
-      setAddedToCart(false)
-      addedCartUrlRef.current = null
-      setSpecsOpen(false)
-      setSearchResults([])
-      setStep('product')
-    }
-  }))
-
   /* ── bootstrap ── */
+  const hydrateOrderGuideLivePreviewFromHistory = useCallback(async () => {
+    if (!userId) return null
+
+    const requestId = ++orderGuideLivePreviewFetchIdRef.current
+
+    try {
+      const historyData = await apiFetch(`/api/history?user_id=${userId}`, { method: 'GET' })
+      if (requestId !== orderGuideLivePreviewFetchIdRef.current) {
+        return null
+      }
+
+      const historyItems = Array.isArray(historyData)
+        ? historyData
+        : historyData
+          ? [historyData]
+          : []
+      const matchedItem = historyItems.find(isOrderGuideLivePreviewEntry) || null
+
+      if (matchedItem) {
+        setOrderGuideLivePreviewData(matchedItem)
+      }
+
+      return matchedItem
+    } catch {
+      return null
+    }
+  }, [userId])
+
+  useEffect(() => {
+    hydrateOrderGuideLivePreviewFromHistory()
+  }, [hydrateOrderGuideLivePreviewFromHistory])
+
+  useEffect(() => {
+    setOrderGuideCartPreview(
+      parseOrderGuideCartPreviewSetting(adminSettings?.[ORDER_GUIDE_STEP_SIX_PREVIEW_SETTING_KEY]),
+    )
+    setOrderGuideOrdersPreview(
+      parseOrderGuideOrdersPreviewSetting(adminSettings?.[ORDER_GUIDE_STEP_EIGHT_PREVIEW_SETTING_KEY]),
+    )
+  }, [adminSettings])
+
   const openShowcaseProduct = useCallback((data) => {
     const nextProduct = {
       url: data.product_url || data.url || '',
@@ -750,6 +1304,41 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setShowcaseProducts([])
   }, [])
 
+  const applyPromoBannerSource = useCallback((bootstrapPayload) => {
+    const nextBanners = (Array.isArray(bootstrapPayload?.promo_banners) ? bootstrapPayload.promo_banners : [])
+      .map((banner) => normalizePromoBanner(banner))
+      .filter((banner) => banner.title || banner.image_url)
+    const nextEntryBannerId = Number(bootstrapPayload?.promo_entry_banner_id || 0)
+
+    const resolvedBanners = nextBanners.length ? nextBanners : CALC_PROMO_BANNERS
+    setPromoBanners(resolvedBanners)
+    setPromoEntryBannerId(
+      nextBanners.some((banner) => banner.id === nextEntryBannerId)
+        ? nextEntryBannerId
+        : 0,
+    )
+    setPromoModalBannerId((currentBannerId) => {
+      if (!currentBannerId) return currentBannerId
+
+      const bannerStillExists = resolvedBanners.some((banner) => banner.id === currentBannerId)
+      if (bannerStillExists) {
+        return currentBannerId
+      }
+
+      return nextEntryBannerId && resolvedBanners.some((banner) => banner.id === nextEntryBannerId)
+        ? nextEntryBannerId
+        : 0
+    })
+    setPromoSlideIndex((currentIndex) => {
+      if (!resolvedBanners.length) return 0
+      return Math.min(currentIndex, resolvedBanners.length - 1)
+    })
+  }, [])
+
+  const applyAboutDetailsSource = useCallback((bootstrapPayload) => {
+    setAboutDetailsSlides(normalizeAboutDetailsSlides(bootstrapPayload?.about_details_slides))
+  }, [])
+
   const refreshBootstrap = useCallback(async () => {
     try {
       const data = await bootstrapWithInitData({ userId, initData })
@@ -762,17 +1351,37 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       }
       setIsAdminViewer(Boolean(data?.is_admin))
       await applyShowcaseSource(data)
+      applyAboutDetailsSource(data)
+      applyPromoBannerSource(data)
       return data
     } catch {
       setIsAdminViewer(false)
+      setAboutDetailsSlides(null)
+      setPromoBanners(CALC_PROMO_BANNERS)
+      setPromoEntryBannerId(0)
       return null
     }
-  }, [applyShowcaseSource, initData, userId])
+  }, [applyAboutDetailsSource, applyPromoBannerSource, applyShowcaseSource, initData, userId])
 
   useEffect(() => {
     if (!active) return
     refreshBootstrap()
   }, [active, refreshBootstrap])
+
+  useEffect(() => {
+    if (!active || step !== 'idle' || promoModalBannerId || promoEntryShownRef.current) {
+      return undefined
+    }
+
+    const entryBanner = promoBanners.find((banner) => banner.id === promoEntryBannerId)
+    if (!entryBanner) {
+      return undefined
+    }
+
+    promoEntryShownRef.current = true
+    setPromoModalBannerId(entryBanner.id)
+    return undefined
+  }, [active, promoBanners, promoEntryBannerId, promoModalBannerId, step])
 
   const handleShowcaseCardSelect = useCallback((item) => {
     const productData = item?.productData || item?.sourceData
@@ -788,36 +1397,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       window.open(item.href, '_blank', 'noopener,noreferrer')
     }
   }, [haptic, openShowcaseProduct])
-
-  const handleOpenShowcaseEditor = useCallback(async () => {
-    if (!initData) return
-
-    const emptySlots = buildShowcaseEditorSlots([], [])
-
-    setShowcaseEditorOpen(true)
-    setShowcaseEditorLoading(true)
-    setShowcaseEditorError('')
-    setShowcaseEditorSlotErrors({})
-    setShowcaseEditorSlots(emptySlots)
-    setShowcaseEditorActiveSlot(1)
-    setShowcaseEditorInput('')
-
-    try {
-      const data = await fetchAdminShowcase({ initData })
-      const nextSlots = buildShowcaseEditorSlots(data?.links, data?.items)
-      const defaultSelection = getDefaultShowcaseSlotSelection(nextSlots)
-
-      setShowcaseEditorSlots(nextSlots)
-      setShowcaseEditorActiveSlot(defaultSelection.slot)
-      setShowcaseEditorInput(defaultSelection.input)
-    } catch (requestError) {
-      setShowcaseEditorError(
-        getShowcaseEditorRequestMessage(requestError, 'Не удалось загрузить настройки витрины.'),
-      )
-    } finally {
-      setShowcaseEditorLoading(false)
-    }
-  }, [initData])
 
   const clearShowcaseEditorSlotError = useCallback((slotNumber) => {
     setShowcaseEditorSlotErrors((currentErrors) => {
@@ -990,32 +1569,32 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   ])
 
   useEffect(() => {
-    if (!active || step !== 'idle' || prefersReducedMotion || CALC_PROMO_BANNERS.length < 2) {
+    if (!active || step !== 'idle' || prefersReducedMotion || promoBanners.length < 2) {
       return undefined
     }
 
     const intervalId = window.setInterval(() => {
-      setPromoSlideIndex((currentIndex) => (currentIndex + 1) % CALC_PROMO_BANNERS.length)
+      setPromoSlideIndex((currentIndex) => (currentIndex + 1) % promoBanners.length)
     }, 4000)
 
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [active, prefersReducedMotion, step])
+  }, [active, prefersReducedMotion, promoBanners.length, step])
 
   /* ── publish calculator-specific shell swipe root ── */
   useEffect(() => {
-    const blockShellSwipe = active && (step === 'search-results' || step === 'product' || step === 'loading' || compareOpen)
+    const blockShellSwipe = active && (step === 'search-results' || step === 'product' || step === 'loading')
     document.body.dataset.shellSwipeRootCalculator = blockShellSwipe ? '0' : '1'
     return () => { document.body.dataset.shellSwipeRootCalculator = '1' }
-  }, [active, step, compareOpen])
+  }, [active, step])
 
   /* ── keep legacy shell fallback in sync during migration ── */
   useEffect(() => {
-    const blockShellSwipe = active && (step === 'search-results' || step === 'product' || step === 'loading' || compareOpen)
+    const blockShellSwipe = active && (step === 'search-results' || step === 'product' || step === 'loading')
     document.body.dataset.blockTabSwipe = blockShellSwipe ? '1' : '0'
     return () => { document.body.dataset.blockTabSwipe = '0' }
-  }, [active, step, compareOpen])
+  }, [active, step])
 
   /* ── gallery swipe ── */
   const galleryTouchRef = useRef({ x: 0, y: 0 })
@@ -1040,24 +1619,22 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   /* ── loading text stages ── */
   useEffect(() => {
     if (step !== 'loading') return
-    // Don't override compare loading text
-    if (compareLoadingText) return
     setLoadingText('Загружаю товар...')
     const t1 = setTimeout(() => setLoadingText('Анализирую данные...'), 5000)
     const t2 = setTimeout(() => setLoadingText('Почти готово...'), 15000)
     const t3 = setTimeout(() => setLoadingText('Ещё немного...'), 30000)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-  }, [step, compareLoadingText])
+  }, [step, loadingMode])
 
   /* ── images ── */
   useEffect(() => {
-    if (step !== 'loading' || compareLoadingText || loadingMode !== 'search') return
+    if (step !== 'loading' || loadingMode !== 'search') return
     setLoadingText('Ищу товары...')
     const t1 = setTimeout(() => setLoadingText('Собираю результаты...'), 5000)
     const t2 = setTimeout(() => setLoadingText('Почти готово...'), 15000)
     const t3 = setTimeout(() => setLoadingText('Ещё немного...'), 30000)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-  }, [step, compareLoadingText, loadingMode])
+  }, [step, loadingMode])
 
   const images = product
     ? [product.image_url, ...(product.extra_images || [])].filter(Boolean).map(proxyImageUrl)
@@ -1185,16 +1762,23 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const hasStartingPrice = priceState.isStartingPrice
   const curPriceRub = curPrice && rate ? Math.round(curPrice * rate.cny_rub) : null
   const selectedOptionsText = getSelectedOptionsText(product, selVariants, selSize)
+  const deliverySettings = getDeliverySettings(adminSettings || {})
   const pricingSnapshot = JSON.stringify({
     rate: rate?.cny_rub ?? null,
     commission: adminSettings?.commission_pct ?? null,
     minCommission: adminSettings?.min_commission_rub ?? null,
-    logistics: adminSettings?.logistics_rub ?? null,
-    insurance: adminSettings?.insurance_rub ?? null,
-    perKg: adminSettings?.price_per_kg ?? null,
-    deliveryTime: adminSettings?.delivery_time ?? null,
-    nextShipmentDate: adminSettings?.next_shipment_date ?? null,
+    standardDeliveryRub500g: adminSettings?.delivery_standard_moscow_rub_500g ?? null,
+    expressDeliveryRub500g: adminSettings?.delivery_air_moscow_rub_500g ?? null,
+    cdekDeliveryRub500g: adminSettings?.delivery_cdek_russia_rub_500g ?? null,
+    standardDeliveryDays: adminSettings?.delivery_standard_moscow_days ?? null,
+    expressDeliveryDays: adminSettings?.delivery_air_moscow_days ?? null,
+    cdekDeliveryDays: adminSettings?.delivery_cdek_russia_days ?? null,
   })
+  const deliveryInfo = {
+    standard_days: result?.delivery_info?.standard_days || deliverySettings.standardDays,
+    express_days: result?.delivery_info?.express_days || deliverySettings.expressDays,
+    cdek_days: result?.delivery_info?.cdek_days || deliverySettings.cdekDays,
+  }
 
   // Button state: ref survives any re-render/effect that resets addedToCart state
   const isInCart = addedToCart || (product && addedCartUrlRef.current === product.url)
@@ -1204,48 +1788,11 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       ? BUYER_STATE_COPY.calculator.searchError
       : null
   const addToCartSuccessState = BUYER_STATE_COPY.calculator.addToCartSuccess
-  const canSubmitLink = Boolean(url.trim())
-  const canSubmitNameSearch = Boolean(searchQuery.trim()) && NAME_SEARCH_PLATFORMS.has(searchPlatform)
-  const searchUnavailableMeta = SEARCH_UNAVAILABLE_SHEET_META[searchUnavailablePlatform] || null
-  const closeSearchUnavailableSheet = () => {
-    setSearchUnavailablePlatform('')
-    haptic?.('light')
-  }
-  const searchUnavailableSheet = (
-    <BottomSheet
-      open={Boolean(searchUnavailableMeta)}
-      onClose={closeSearchUnavailableSheet}
-      badge={searchUnavailableMeta?.badge || ''}
-      title={searchUnavailableMeta?.title || ''}
-      subtitle={searchUnavailableMeta?.subtitle || ''}
-      className={`calc-search-unavailable-sheet${searchUnavailablePlatform ? ` calc-search-unavailable-sheet--${searchUnavailablePlatform}` : ''}`}
-      overlayClassName="calc-search-unavailable-sheet__overlay"
-      bodyClassName="calc-search-unavailable-sheet__body"
-      footer={(
-        <button
-          type="button"
-          className="calc-search-unavailable-sheet__button pressable"
-          onClick={closeSearchUnavailableSheet}
-        >
-          Закрыть
-        </button>
-      )}
-    >
-      <div className="calc-search-unavailable-sheet__content" data-shell-swipe-block="true">
-        <div className="calc-search-unavailable-sheet__icon" aria-hidden="true">
-          <IconInfo size={18} />
-        </div>
-        <div className="calc-search-unavailable-sheet__copy">
-          <p className="calc-search-unavailable-sheet__text">
-            {searchUnavailableMeta?.text || ''}
-          </p>
-          <p className="calc-search-unavailable-sheet__note">
-            {searchUnavailableMeta?.note || ''}
-          </p>
-        </div>
-      </div>
-    </BottomSheet>
-  )
+  const searchInputText = searchInput.trim()
+  const searchInputUrl = extractShowcaseInputUrl(searchInput)
+  const canSubmitSearchInput = Boolean(searchInputText)
+  const canSubmitNameSearch = Boolean(searchQuery.trim())
+  const showAnimatedSearchHint = !searchInputText && !searchInputFocused
 
   /* ── auto-calculate when price changes ── */
   const calcKey = step === 'product' && product && curPrice
@@ -1256,6 +1803,10 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     if (!active) return
     if (!calcKey || !product || !curPrice) {
       setResult(null)
+      return
+    }
+    if (skipNextAutoCalculateRef.current) {
+      skipNextAutoCalculateRef.current = false
       return
     }
     const ac = new AbortController()
@@ -1319,11 +1870,18 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
   /* ═══════════ handlers ═══════════ */
 
-  const handleSubmit = async () => {
-    const u = url.trim()
+  const handleSubmit = useCallback(async (inputUrl = searchInputUrl, options = {}) => {
+    const { withHaptic = true } = options
+    const u = extractShowcaseInputUrl(inputUrl) || String(inputUrl || '').trim()
     if (!u) return
-    haptic?.('medium')
+    const requestId = parseProductRequestIdRef.current + 1
+    parseProductRequestIdRef.current = requestId
+    if (withHaptic) {
+      haptic?.('medium')
+    }
     setError(null)
+    setSearchError(null)
+    setSearchResultOpenError(null)
     setLoadingMode('product')
     setLoadingText('Загружаю товар...')
     setStep('loading')
@@ -1332,6 +1890,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         method: 'POST',
         body: JSON.stringify({ url: u }),
       })
+      if (parseProductRequestIdRef.current !== requestId) {
+        return
+      }
       setProduct(d)
       setActiveImg(0)
       setSelVariants({})
@@ -1343,33 +1904,31 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       addedCartUrlRef.current = null
       setSpecsOpen(false)
       setStep('product')
-      haptic?.('light')
+      if (withHaptic) {
+        haptic?.('light')
+      }
     } catch {
+      if (parseProductRequestIdRef.current !== requestId) {
+        return
+      }
       setError('Не удалось загрузить товар. Проверь ссылку.')
       setStep('idle')
-      haptic?.('error')
+      if (withHaptic) {
+        haptic?.('error')
+      }
     }
-  }
-
-  const handleSearchPlatformSelect = (platform) => {
-    haptic?.('light')
-    if (!NAME_SEARCH_PLATFORMS.has(platform)) {
-      return
-    }
-    setSearchError(null)
-    setSearchResultOpenError(null)
-    setSearchPlatform(platform)
-  }
+  }, [haptic, searchInputUrl])
 
   /* ── search handler ── */
-  const handleSearch = async () => {
-    const q = searchQuery.trim()
-    const requestedPlatform = normalizeNameSearchPlatform(searchPlatform)
+  const handleSearch = async (inputQuery = searchInputText) => {
+    const q = String(inputQuery || '').trim()
+    const requestedPlatform = POIZON_PLATFORM
     if (!q || !requestedPlatform) return
     haptic?.('medium')
+    setError(null)
     setSearchError(null)
     setSearchResultOpenError(null)
-    setSearchUnavailablePlatform('')
+    setSearchQuery(q)
     setSearchLoading(true)
     setLoadingMode('search')
     setLoadingText('Ищу товары...')
@@ -1399,33 +1958,36 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       })
       setSearchResults(normalizedProducts)
       setSearchRate(d.rate_cny_rub)
-      setActiveSearchPlatform(responsePlatform)
       setSearchNextStartId(nextStartId)
-      setSearchPlatform('')
       setSearchHasMore(hasMore)
       setSearchLoading(false)
       setStep('search-results')
       haptic?.('success')
-    } catch (err) {
-      const unavailablePlatform = getSearchUnavailablePlatform(err)
-      if (unavailablePlatform) {
-        setSearchUnavailablePlatform(unavailablePlatform)
-      } else {
-        setSearchError('error')
-      }
+    } catch {
+      setSearchError('error')
       setSearchLoading(false)
       setStep('idle')
       haptic?.('error')
     }
   }
 
+  const handlePrimarySearch = () => {
+    if (!searchInputText) return
+
+    if (searchInputUrl) {
+      handleSubmit(searchInputUrl)
+      return
+    }
+
+    handleSearch(searchInputText)
+  }
+
   const handleLoadMore = async () => {
     const q = searchQuery.trim()
-    const requestedPlatform = normalizeNameSearchPlatform(activeSearchPlatform)
+    const requestedPlatform = POIZON_PLATFORM
     if (!q || searchLoadingMore || !requestedPlatform || !searchHasMore) return
     const currentStartId = searchNextStartId
     haptic?.('light')
-    setSearchUnavailablePlatform('')
     setSearchLoadingMore(true)
     try {
       const d = await apiFetch('/api/search-products', {
@@ -1451,19 +2013,14 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         })
         const merged = [...searchResults, ...normalizedProducts]
         setSearchResults(merged)
-        setActiveSearchPlatform(responsePlatform)
         setSearchNextStartId(nextStartId)
         setSearchHasMore(hasMore)
         haptic?.('success')
       } else {
         setSearchHasMore(false)
       }
-    } catch (err) {
-      const unavailablePlatform = getSearchUnavailablePlatform(err)
-      if (unavailablePlatform) {
-        setSearchUnavailablePlatform(unavailablePlatform)
-        setSearchHasMore(false)
-      }
+    } catch {
+      setSearchHasMore(false)
       haptic?.('error')
     }
     setSearchLoadingMore(false)
@@ -1506,43 +2063,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     }
   }
 
-  const handleCompare = async (market) => {
-    const name = product?.name || ''
-    if (!name) return
-    haptic?.('light')
-    setCompareMarket(market)
-    setCompareData(null)
-    setCompareOpen(false)
-    setCompareShowAll(false)
-    setStep('loading')
-    const mktName = market === 'wb' ? 'Wildberries' : 'Ozon'
-    setCompareLoadingText(`Ищем на ${mktName}...`)
-    const t1 = setTimeout(() => setCompareLoadingText('Анализируем результаты...'), 8000)
-    const t2 = setTimeout(() => setCompareLoadingText('Фильтруем товары...'), 20000)
-    const t3 = setTimeout(() => setCompareLoadingText('Почти готово...'), 40000)
-    try {
-      const data = await apiFetch('/api/compare', {
-        method: 'POST',
-        body: JSON.stringify({
-          product_name: name,
-          category: product?.category || '',
-          market,
-          our_price_rub: result?.total_with_margin_rub || result?.subtotal_rub || 0,
-        }),
-      })
-      setCompareData(data)
-      setCompareOpen(true)
-    } catch (err) {
-      setCompareData({ status: 'error', error: err.message, items: [] })
-      setCompareOpen(true)
-    } finally {
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
-      setCompareLoadingText('')
-      setStep('product')
-    }
-  }
-
   const handleBack = () => {
+    parseProductRequestIdRef.current += 1
+    skipNextAutoCalculateRef.current = false
     haptic?.('light')
     addedCartUrlRef.current = null
     if ((step === 'product' || step === 'loading') && searchResults.length > 0) {
@@ -1559,7 +2082,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setError(null)
       setSavedCalcId(null)
       setAddedToCart(false)
-      setActiveSearchPlatform('')
     }
   }
 
@@ -1571,9 +2093,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setSearchResults([])
     setSearchHasMore(false)
     setSearchNextStartId(0)
-    setSearchPlatform('')
-    setActiveSearchPlatform('')
-    setSearchUnavailablePlatform('')
   }
 
   const handlePromoTouchStart = (event) => {
@@ -1592,7 +2111,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
     const deltaX = promoTouchRef.current.x - touch.clientX
     const deltaY = promoTouchRef.current.y - touch.clientY
-    if (Math.abs(deltaX) < 36 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) {
+    if (promoBanners.length < 2 || Math.abs(deltaX) < 36 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) {
       promoTouchRef.current.moved = false
       return
     }
@@ -1600,86 +2119,54 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     promoTouchRef.current.moved = true
     setPromoSlideIndex((currentIndex) => {
       const direction = deltaX > 0 ? 1 : -1
-      return (currentIndex + direction + CALC_PROMO_BANNERS.length) % CALC_PROMO_BANNERS.length
+      return (currentIndex + direction + promoBanners.length) % promoBanners.length
     })
     haptic?.('light')
   }
 
+  const handleClosePromoBanner = useCallback(() => {
+    setPromoModalBannerId(0)
+    haptic?.('light')
+  }, [haptic])
+
+  const handlePromoBannerAction = useCallback((banner, targetUrl = '') => {
+    const resolvedUrl = String(targetUrl || banner?.button_url || '').trim()
+    if (!resolvedUrl) {
+      return
+    }
+
+    try {
+      if (typeof tg?.openLink === 'function') {
+        tg.openLink(resolvedUrl)
+      } else {
+        window.open(resolvedUrl, '_blank', 'noopener,noreferrer')
+      }
+      haptic?.('light')
+    } catch {
+      haptic?.('error')
+    }
+  }, [haptic, tg])
+
   const handlePromoBannerClick = (event) => {
-    if (!promoTouchRef.current.moved) return
+    if (promoTouchRef.current.moved) {
+      event.preventDefault()
+      promoTouchRef.current.moved = false
+      return
+    }
+
     event.preventDefault()
-    promoTouchRef.current.moved = false
+    if (activePromoBanner?.id) {
+      setPromoModalBannerId(activePromoBanner.id)
+    }
+    haptic?.('light')
   }
 
   /* ── open product detail from search result ── */
   const handleOpenProduct = async (item) => {
     if (!item || typeof item !== 'object') return
 
-    const itemPlatform = normalizeNameSearchPlatform(item.platform) || normalizeNameSearchPlatform(activeSearchPlatform)
     haptic?.('medium')
     setSearchResultOpenError(null)
-
-    if (itemPlatform === 'taobao' || itemPlatform === '1688') {
-      const targetUrl = buildMarketplaceResultUrl(item, itemPlatform)
-      const platformLabel = P_NAME[itemPlatform] || itemPlatform
-      if (!targetUrl) {
-        setSearchResultOpenError(`Не удалось определить ссылку на товар ${platformLabel}.`)
-        haptic?.('error')
-        return
-      }
-
-      setLoadingMode('product')
-      setLoadingText('Загружаю товар...')
-      setStep('loading')
-
-      try {
-        const detailProduct = await apiFetch('/api/parse-product', {
-          method: 'POST',
-          body: JSON.stringify({ url: targetUrl }),
-        })
-
-        setProduct({
-          url: detailProduct.url || targetUrl,
-          platform: detailProduct.platform || itemPlatform,
-          name: detailProduct.name || item.title || '',
-          brand: detailProduct.brand || item.brand || '',
-          price_cny: detailProduct.price_cny,
-          price_is_starting: Boolean(detailProduct.price_is_starting),
-          size: detailProduct.size || '',
-          category: detailProduct.category || item.category || '',
-          weight_kg: null,
-          weight_estimated: false,
-          city: detailProduct.city || '',
-          delivery_type: detailProduct.delivery_type || '',
-          image_url: detailProduct.image_url || item.image || '',
-          extra_images: detailProduct.extra_images || item.extra_images || [],
-          specs: detailProduct.specs || {},
-          available_sizes: detailProduct.available_sizes || [],
-          variants: detailProduct.variants || [],
-          variant_price_map: detailProduct.variant_price_map || {},
-          original_variants: detailProduct.original_variants || [],
-          notes: detailProduct.notes || '',
-          auto_detected: detailProduct.auto_detected || [],
-        })
-        setActiveImg(0)
-        setSelVariants({})
-        setSelSize('')
-        setManualPrice('')
-        setResult(null)
-        setSavedCalcId(null)
-        setAddedToCart(false)
-        addedCartUrlRef.current = null
-        setSpecsOpen(false)
-        setStep('product')
-        haptic?.('success')
-      } catch {
-        setSearchResultOpenError(`Не удалось загрузить детали товара ${platformLabel}. Попробуйте выбрать другую карточку.`)
-        setStep('search-results')
-        haptic?.('error')
-      }
-      return
-    }
-
     const spuId = String(item.spu_id || '').trim()
     if (!spuId) {
       haptic?.('error')
@@ -1737,11 +2224,145 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     || !showcaseEditorInputUrl
     || Boolean(showcaseEditorDuplicateSlot)
     || showcaseEditorInputUnchanged
-  const activePromoBanner = CALC_PROMO_BANNERS[promoSlideIndex] || CALC_PROMO_BANNERS[0]
+  const activePromoBanner = promoBanners[promoSlideIndex] || promoBanners[0] || null
+  const activePromoModalBanner = promoBanners.find((banner) => banner.id === promoModalBannerId) || null
 
-  if (step === 'idle') {
+  const handleOpenAboutDetails = () => {
+    setAboutDetailsOpen(true)
+    haptic?.('light')
+  }
+
+  const handleCloseAboutDetails = () => {
+    setAboutDetailsOpen(false)
+    haptic?.('light')
+  }
+
+  const handleOpenOrderGuide = useCallback(() => {
+    hydrateOrderGuideLivePreviewFromHistory()
+    orderGuideIdleSearchInputRef.current = searchInput
+    orderGuideLivePreviewTriggeredRef.current = false
+    resetOrderGuidePreviewSelectionState()
+    setOrderGuideStep(1)
+    setOrderGuideOpen(true)
+    haptic?.('light')
+  }, [haptic, hydrateOrderGuideLivePreviewFromHistory, resetOrderGuidePreviewSelectionState, searchInput])
+
+  useImperativeHandle(ref, () => ({
+    openProduct(data) {
+      openPersistedCalculation(data)
+    },
+    openOrderGuide() {
+      handleOpenOrderGuide()
+    },
+  }), [handleOpenOrderGuide, openPersistedCalculation])
+
+  const handleOrderGuideStepChange = useCallback((nextStep) => {
+    if (nextStep === 5) {
+      resetOrderGuidePreviewSelectionState()
+    }
+    setOrderGuideStep(nextStep)
+  }, [resetOrderGuidePreviewSelectionState])
+
+  const handleCloseOrderGuide = () => {
+    const shouldRestoreIdleState = orderGuideLivePreviewTriggeredRef.current
+    resetOrderGuideLivePreviewRuntime()
+    setOrderGuideStep(1)
+    setOrderGuideOpen(false)
+    if (shouldRestoreIdleState) {
+      restoreOrderGuideIdleState()
+    }
+    haptic?.('light')
+  }
+
+  useEffect(() => {
+    if (!orderGuideOpen || orderGuideStep !== 5 || orderGuideLivePreviewTriggeredRef.current) {
+      return
+    }
+
+    orderGuideLivePreviewTriggeredRef.current = true
+    openPersistedCalculation(orderGuideLivePreviewData || ORDER_GUIDE_LIVE_PREVIEW_SNAPSHOT)
+  }, [openPersistedCalculation, orderGuideLivePreviewData, orderGuideOpen, orderGuideStep])
+
+  const orderGuideOverlay = (
+    <OrderGuideSheet
+      open={orderGuideOpen}
+      onClose={handleCloseOrderGuide}
+      onCurrentStepChange={handleOrderGuideStepChange}
+      cartGuidePreview={orderGuideCartPreview}
+      ordersGuidePreview={orderGuideOrdersPreview}
+    />
+  )
+
+  const shouldShowOrderGuideLiveProductScreen = orderGuideOpen
+    && orderGuideStep === 5
+    && orderGuideLivePreviewTriggeredRef.current
+  const displayStep = orderGuideOpen
+    && orderGuideLivePreviewTriggeredRef.current
+    && !shouldShowOrderGuideLiveProductScreen
+    ? 'idle'
+    : step
+  useEffect(() => {
+    if (displayStep !== 'product' || !orderGuideOpen || orderGuideStep !== 5) {
+      cancelOrderGuideAutoScroll()
+      return undefined
+    }
+
+    let setupFrameId = 0
+
+    const startAutoScroll = () => {
+      const scrollNode = productScrollRef.current
+      if (!(scrollNode instanceof HTMLElement)) {
+        return
+      }
+
+      const maxScrollTop = Math.max(0, scrollNode.scrollHeight - scrollNode.clientHeight)
+      const targetScrollTop = maxScrollTop * 0.4
+      scrollNode.scrollTop = 0
+
+      if (targetScrollTop <= 0) {
+        return
+      }
+
+      const duration = prefersReducedMotion ? 2000 : 3400
+      let startedAt = 0
+
+      const stepScroll = (timestamp) => {
+        if (!startedAt) {
+          startedAt = timestamp
+        }
+
+        const elapsed = timestamp - startedAt
+        const progress = Math.min(elapsed / duration, 1)
+        const easedProgress = 1 - ((1 - progress) * (1 - progress) * (1 - progress))
+        scrollNode.scrollTop = targetScrollTop * easedProgress
+
+        if (progress < 1) {
+          orderGuideAutoScrollFrameRef.current = window.requestAnimationFrame(stepScroll)
+        } else {
+          orderGuideAutoScrollFrameRef.current = 0
+        }
+      }
+
+      orderGuideAutoScrollFrameRef.current = window.requestAnimationFrame(stepScroll)
+    }
+
+    cancelOrderGuideAutoScroll()
+    setupFrameId = window.requestAnimationFrame(() => {
+      startAutoScroll()
+    })
+
+    return () => {
+      if (setupFrameId) {
+        window.cancelAnimationFrame(setupFrameId)
+      }
+      cancelOrderGuideAutoScroll()
+    }
+  }, [cancelOrderGuideAutoScroll, displayStep, orderGuideOpen, orderGuideStep, prefersReducedMotion])
+
+  if (displayStep === 'idle') {
     return (
-      <div ref={idlePageRef} className="calc-page buyer-page buyer-page--calculator">
+      <>
+        <div ref={idlePageRef} className="calc-page buyer-page buyer-page--calculator">
         <div className="calc-page__ambient" aria-hidden="true">
           {active && !prefersReducedMotion ? (
             <LightRays
@@ -1764,9 +2385,14 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         </div>
         <div className="calc-page__content">
           <div className="calc-page__hero">
-            <div className="calc-page__icon">
-              <IconCalculator size={28} />
-            </div>
+            <img
+              className="calc-page__logo-media"
+              src="/0403.gif"
+              alt="Logistics Store"
+              loading="eager"
+              fetchPriority="high"
+              decoding="sync"
+            />
             <p className="calc-page__greeting">{greeting},</p>
             <h1 className="calc-page__title">{firstName}</h1>
             <p className="calc-page__sub">
@@ -1783,21 +2409,71 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             threshold={0.18}
             enabled={active && !prefersReducedMotion}
           >
-            <div className="calc-page__input-wrap">
+            <div className="calc-page__cta-stack">
+              <div className="calc-page__input-spotlight-shell">
+                <div
+                  className="calc-page__input-spotlight-band calc-page__input-spotlight-band--top"
+                  aria-hidden="true"
+                />
+                <div className="calc-page__input-wrap">
+            {showAnimatedSearchHint ? (
+              <div className="calc-page__input-ghost" aria-hidden="true">
+                <TextType
+                  as="span"
+                  text={CALC_SEARCH_HINTS}
+                  typingSpeed={50}
+                  initialDelay={0}
+                  pauseDuration={2000}
+                  deletingSpeed={30}
+                  loop
+                  showCursor
+                  hideCursorWhileTyping={false}
+                  cursorCharacter="|"
+                  cursorBlinkDuration={0.5}
+                  className="calc-page__input-text-type"
+                  cursorClassName="calc-page__input-text-type-cursor"
+                />
+              </div>
+            ) : null}
             <input
               className="calc-page__input"
-              type="url"
-              placeholder="Вставь ссылку на товар..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              type="text"
+              value={searchInput}
+              placeholder=""
+              onChange={(e) => {
+                setSearchInput(e.target.value)
+                setError(null)
+                setSearchError(null)
+                setSearchResultOpenError(null)
+              }}
+              onFocus={() => setSearchInputFocused(true)}
+              onBlur={() => setSearchInputFocused(false)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePrimarySearch()}
               autoComplete="off"
               autoCorrect="off"
               spellCheck="false"
+              enterKeyHint="search"
+              aria-label="Поиск товара по ссылке или названию"
             />
-            <button className="calc-page__submit pressable" onClick={handleSubmit} disabled={!canSubmitLink}>
+            <button className="calc-page__submit pressable" onClick={handlePrimarySearch} disabled={!canSubmitSearchInput}>
               <IconSearch size={20} />
             </button>
+                </div>
+                <div
+                  className="calc-page__input-spotlight-band calc-page__input-spotlight-band--bottom"
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="calc-page__quick-actions" role="group" aria-label="Быстрые действия">
+                <button type="button" className="calc-page__quick-action calc-page__quick-action--latched pressable" onClick={handleOpenAboutDetails}>
+                  <IconInfo size={20} />
+                  <span>Подробнее о нас</span>
+                </button>
+                <button type="button" className="calc-page__quick-action calc-page__quick-action--latched pressable" onClick={handleOpenOrderGuide}>
+                  <BrandGemIcon size={20} colors={['currentColor', 'currentColor', 'currentColor']} />
+                  <span>Как сделать заказ</span>
+                </button>
+              </div>
             </div>
           </FadeContent>
 
@@ -1810,13 +2486,13 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                 title={BUYER_STATE_COPY.calculator.linkError.title}
                 body={BUYER_STATE_COPY.calculator.linkError.body}
                 actionLabel={BUYER_STATE_COPY.calculator.linkError.actionLabel}
-                onAction={handleSubmit}
+                onAction={handlePrimarySearch}
                 icon={getCalculatorStateIcon(BUYER_STATE_COPY.calculator.linkError.iconName)}
               />
             </div>
           ) : null}
 
-          <div className="calc-search">
+          <div className={searchStateCopy ? 'calc-search' : 'calc-search calc-search--collapsed'}>
             <FadeContent
               className="calc-page__fade-field"
               container={idlePageRef}
@@ -1830,7 +2506,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               <input
                 className="calc-page__input"
                 type="text"
-                placeholder="Название + выберите платформу ниже"
+                placeholder="Название товара"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -1874,80 +2550,49 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                   title={searchStateCopy.title}
                   body={searchStateCopy.body}
                   actionLabel={searchError === 'error' ? searchStateCopy.actionLabel : undefined}
-                  onAction={searchError === 'error' ? handleSearch : undefined}
+                  onAction={searchError === 'error' ? handlePrimarySearch : undefined}
                   icon={getCalculatorStateIcon(searchStateCopy.iconName)}
                 />
               </div>
             ) : null}
           </div>
 
-          <div className="calc-page__platforms calc-page__platforms--hero" aria-label="Поддерживаемые платформы">
-            {NAME_SEARCH_PLATFORM_OPTIONS.map(({ key, label }) => {
-              const isSelected = searchPlatform === key
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className={`calc-page__platform-pill${isSelected ? ' calc-page__platform-pill--selected' : ''}`}
-                  data-market={key}
-                  aria-pressed={isSelected}
-                  onClick={() => handleSearchPlatformSelect(key)}
-                >
-                  <span className="calc-page__platform-pill-shimmer" aria-hidden="true" />
-                  <span className="calc-page__platform-pill-label">{label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          <CalculatorShowcase
-            items={showcaseProducts}
-            onSelect={handleShowcaseCardSelect}
-            actions={isAdminViewer ? (
-              <button
-                type="button"
-                className="calc-showcase__manage pressable"
-                onClick={handleOpenShowcaseEditor}
-              >
-                Управлять
-              </button>
-            ) : null}
-          />
-
-          <div className={`calc-banner-carousel calc-banner-carousel--${activePromoBanner.tone}`}>
-            <a
+          <div className="calc-banner-carousel">
+            <button
+              type="button"
               className="calc-banner pressable"
-              href={activePromoBanner.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Открыть баннер ${activePromoBanner.label}`}
               onTouchStart={handlePromoTouchStart}
               onTouchEnd={handlePromoTouchEnd}
               onClick={handlePromoBannerClick}
+              aria-label={`Открыть баннер ${activePromoBanner.label}`}
             >
-              <div className="calc-banner__aura calc-banner__aura--left" />
-              <div className="calc-banner__aura calc-banner__aura--right" />
-              <div className="calc-banner__viewport">
-                {CALC_PROMO_BANNERS.map((banner, index) => (
-                  <span
-                    key={banner.label}
-                    className={`calc-banner__slide${index === promoSlideIndex ? ' calc-banner__slide--active' : ''}`}
-                    aria-hidden={index === promoSlideIndex ? 'false' : 'true'}
-                  >
-                    <img className="calc-banner__image" src={banner.image} alt={banner.alt} loading="lazy" />
-                  </span>
-                ))}
+              <div className="calc-banner__aura calc-banner__aura--left" aria-hidden="true" />
+              <div className="calc-banner__aura calc-banner__aura--right" aria-hidden="true" />
+              <div className="calc-banner__surface">
+                <div className="calc-banner__viewport">
+                  {promoBanners.map((banner, index) => (
+                    <span
+                      key={banner.id || banner.label || index}
+                      className={`calc-banner__slide${index === promoSlideIndex ? ' calc-banner__slide--active' : ''}`}
+                      aria-hidden={index === promoSlideIndex ? 'false' : 'true'}
+                    >
+                      <img
+                        className="calc-banner__image"
+                        src={banner.image_url}
+                        alt={banner.image_alt || banner.title || banner.label || ''}
+                        loading={index === 0 ? 'eager' : 'lazy'}
+                      />
+                    </span>
+                  ))}
+                </div>
+
               </div>
-              <div className="calc-banner__chrome">
-                <span className="calc-banner__chip">Telegram picks</span>
-                <span className="calc-banner__counter">{promoSlideIndex + 1} / {CALC_PROMO_BANNERS.length}</span>
-              </div>
-            </a>
+            </button>
 
             <div className="calc-banner__dots" role="tablist" aria-label="Переключение баннеров">
-              {CALC_PROMO_BANNERS.map((banner, index) => (
+              {promoBanners.map((banner, index) => (
                 <button
-                  key={`dot-${banner.label}`}
+                  key={`dot-${banner.id || banner.label || index}`}
                   type="button"
                   className={`calc-banner__dot pressable${index === promoSlideIndex ? ' calc-banner__dot--active' : ''}`}
                   aria-label={`Показать баннер ${banner.label}`}
@@ -1960,6 +2605,24 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               ))}
             </div>
           </div>
+
+          <PromoBannerOverlay
+            open={Boolean(activePromoModalBanner)}
+            banner={activePromoModalBanner}
+            onClose={handleClosePromoBanner}
+            onAction={(targetUrl) => handlePromoBannerAction(activePromoModalBanner, targetUrl)}
+          />
+          <AboutDetailsSheet
+            open={aboutDetailsOpen}
+            onClose={handleCloseAboutDetails}
+            items={aboutDetailsSlides ?? undefined}
+          />
+
+          <CalculatorShowcase
+            items={showcaseProducts}
+            onSelect={handleShowcaseCardSelect}
+            actions={null}
+          />
 
           <BottomSheet
             open={showcaseEditorOpen}
@@ -2160,16 +2823,17 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               )}
             </div>
           </BottomSheet>
-          {searchUnavailableSheet}
         </div>
-      </div>
+        </div>
+        {orderGuideOverlay}
+      </>
     )
   }
 
   /* ═══════════════════════════════════════════════════════════════ */
   /*  SEARCH RESULTS — simple grid with scroll                      */
   /* ═══════════════════════════════════════════════════════════════ */
-  if (step === 'search-results' && searchResults.length > 0) {
+  if (displayStep === 'search-results' && searchResults.length > 0) {
     return (
       <>
         <div className="sr" data-shell-swipe-block="true">
@@ -2182,11 +2846,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
           </button>
           <div className="sr__title-wrap">
             <span className="sr__title">Найдено: {searchResults.length}</span>
-            {activeSearchPlatform ? (
-              <span className={`sr__platform-pill sr__platform-pill--${activeSearchPlatform}`}>
-                {PLATFORM_NAMES[activeSearchPlatform] || activeSearchPlatform}
-              </span>
-            ) : null}
           </div>
         </div>
 
@@ -2261,7 +2920,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
           )}
         </div>
         </div>
-        {searchUnavailableSheet}
       </>
     )
   }
@@ -2269,41 +2927,34 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   /* ═══════════════════════════════════════════════════════════════ */
   /*  LOADING                                                       */
   /* ═══════════════════════════════════════════════════════════════ */
-  if (step === 'loading') {
-    const isCompareLoading = !!compareLoadingText
+  if (displayStep === 'loading') {
     return (
-      <div className="calc-page buyer-page buyer-page--calculator">
+      <>
+        <div className="calc-page buyer-page buyer-page--calculator">
         <div className="calc-loader">
           <LoadingGlyph className="calc-loader__indicator" size="lg" />
-          <p className="calc-loader__text">{isCompareLoading ? compareLoadingText : loadingText}</p>
-          <button className="calc-loader__cancel pressable" onClick={() => {
-            if (isCompareLoading) {
-              setCompareLoadingText('')
-              setStep('product')
-            } else {
-              handleBack()
-            }
-          }}>
+          <p className="calc-loader__text">{loadingText}</p>
+          <button className="calc-loader__cancel pressable" onClick={handleBack}>
             Отменить
           </button>
         </div>
-      </div>
+        </div>
+        {orderGuideOverlay}
+      </>
     )
   }
 
   /* ═══════════════════════════════════════════════════════════════ */
   /*  PRODUCT  (unified — card + live calc + actions)               */
   /* ═══════════════════════════════════════════════════════════════ */
-  if (step === 'product' && product) {
-    const pColor = P_COLOR[product.platform] || '#555'
-    const pName = P_NAME[product.platform] || product.platform
+  if (displayStep === 'product' && product) {
     const hasVariants = (product.variants || []).some((g) => (g.options || []).length >= 2)
-    const SIZE_NAMES = ['size', 'размер', 'sz', 'taille', '尺码', '尺寸']
     const variantHasSizes = (product.variants || []).some(
-      (g) => (g.options || []).length >= 2 && SIZE_NAMES.includes(g.name.toLowerCase())
+      (g) => (g.options || []).length >= 2 && SIZE_GROUP_NAMES.includes(g.name.toLowerCase())
     )
     const hasSizes = !variantHasSizes && (product.available_sizes || []).length >= 2
     const variantGroups = (product.variants || []).filter((g) => (g.options || []).length >= 2)
+    const shouldExposeOrderGuideStepFiveFocus = orderGuideOpen && orderGuideStep === 5
     const allVariantsSelected = variantGroups.every((g) => selVariants[g.name])
     const sizeSelected = !hasSizes || !!selSize
     const allOptionsSelected = allVariantsSelected && sizeSelected
@@ -2343,9 +2994,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       ? 'Цена появится после ввода вручную'
       : 'Цена появится после выбора варианта'
     const needsExactPrice = Boolean(hasStartingPrice && !curPrice)
-    const compareMarketName = compareMarket === 'wb' ? 'Wildberries' : compareMarket === 'ozon' ? 'Ozon' : ''
-    const compareAlternateName = compareMarket === 'wb' ? 'Ozon' : 'Wildberries'
-    const compareSheetClassName = compareMarket ? `cmp-sheet cmp-sheet--${compareMarket}` : 'cmp-sheet'
     const breakdownRows = (result?.breakdown || []).map((row, index) => ({
       id: `${row.label}-${index}`,
       label: row.label,
@@ -2356,6 +3004,11 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       key,
       value,
     }))
+    const shouldShowOrderGuideStepFiveSizeTarget = shouldExposeOrderGuideStepFiveFocus
+    const shouldShowOrderGuideStepFiveCtaTarget = shouldExposeOrderGuideStepFiveFocus
+      && !poizonVariantsUnavailable
+      && !isInCart
+      && !cartAdding
     const ctaNote = poizonVariantsUnavailable
       ? 'Этот вариант сейчас нельзя добавить в корзину.'
       : waitingForExactPriceSelection
@@ -2369,12 +3022,13 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             : ''
 
     return (
-      <div className="calc-page calc-page--filled buyer-page buyer-page--calculator">
+      <>
+        <div className="calc-page calc-page--filled buyer-page buyer-page--calculator">
         <button className="calc-back pressable" onClick={handleBack}>
           <IconArrowLeft size={20} />
         </button>
 
-        <div className="calc-scroll">
+        <div ref={productScrollRef} className="calc-scroll">
           {/* ── gallery ── */}
           {images.length > 0 ? (
             <div className="cg">
@@ -2407,10 +3061,11 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
           <section className="calc-result__summary ui-surface-panel">
             <div className="calc-result__summary-head">
-              <div className="calc-result__summary-meta">
-                <span className="cp-info__platform" style={{ color: pColor, borderColor: pColor + '40' }}>{pName}</span>
-                {product.brand && <span className="cp-info__brand">{product.brand}</span>}
-              </div>
+              {product.brand ? (
+                <div className="calc-result__summary-meta">
+                  <span className="cp-info__brand">{product.brand}</span>
+                </div>
+              ) : null}
 
               <h2 className="cp-info__name">{product.name || 'Товар без названия'}</h2>
 
@@ -2458,6 +3113,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               {(product.variants || []).map((group, gi) => {
                 const opts = group.options || []
                 if (opts.length < 2) return null
+                const isSizeVariantGroup = SIZE_GROUP_NAMES.includes(String(group?.name || '').trim().toLowerCase())
                 return (
                   <div key={group.name} className="cv-group">
                     <div className="cv-group__label">{group.name}</div>
@@ -2467,9 +3123,14 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                         const active = selVariants[group.name] === name
                         const avail = isOptionAvailable(group.name, name, gi)
                         const mp = avail ? getOptionPrice(group.name, name, gi) : null
+                        const shouldHighlightStepFiveFocus = shouldShowOrderGuideStepFiveSizeTarget
+                          && isSizeVariantGroup
+                          && matchesOrderGuidePreferredSize(name)
+                          && avail
                         return (
                           <button key={name}
                             className={`cv-chip pressable${active ? ' active' : ''}${!avail ? ' disabled' : ''}${mp != null ? ' has-price' : ''}`}
+                            data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
                             disabled={!avail}
                             onClick={() => {
                               if (!avail) return
@@ -2511,9 +3172,12 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                 <div className="cv-group__list cv-group__list--sizes">
                   {(product.available_sizes || []).map((raw) => {
                     const name = typeof raw === 'string' ? raw : raw.name || String(raw)
+                    const shouldHighlightStepFiveFocus = shouldShowOrderGuideStepFiveSizeTarget
+                      && matchesOrderGuidePreferredSize(name)
                     return (
                       <button key={name}
                         className={`cv-size pressable${selSize === name ? ' active' : ''}`}
+                        data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
                         onClick={() => { haptic?.('light'); setAddedToCart(false); addedCartUrlRef.current = null; setSavedCalcId(null); setSelSize((p) => (p === name ? '' : name)) }}>
                         {name}
                       </button>
@@ -2548,38 +3212,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             </div>
           )}
 
-          <div className="calc-result__section">
-            <section className="calc-result__compare ui-surface-panel">
-              <div className="calc-result__compare-copy">
-                <p className="section-label">Сравнение</p>
-                <p className="calc-result__support">
-                  Сравните итоговую цену с предложениями на Wildberries и Ozon, не выходя из калькулятора.
-                </p>
-              </div>
-
-              <div className="calc-result__compare-actions">
-                <button
-                  type="button"
-                  className="calc-result__compare-btn"
-                  data-market="wb"
-                  onClick={() => handleCompare('wb')}
-                >
-                  <span className="calc-result__compare-btn-shimmer" aria-hidden="true" />
-                  <span className="calc-result__compare-btn-label">Wildberries</span>
-                </button>
-                <button
-                  type="button"
-                  className="calc-result__compare-btn"
-                  data-market="ozon"
-                  onClick={() => handleCompare('ozon')}
-                >
-                  <span className="calc-result__compare-btn-shimmer" aria-hidden="true" />
-                  <span className="calc-result__compare-btn-label">Ozon</span>
-                </button>
-              </div>
-            </section>
-          </div>
-
           {result && (
             <div className="calc-result__section">
               <section className="calc-result__meta ui-surface-panel">
@@ -2589,27 +3221,34 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                   <div className="calc-result__meta-row">
                     <div className="calc-result__meta-copy">
                       <span>Курс</span>
-                      {result.exchange_rate.age_human && (
-                        <span className="calc-result__support">{result.exchange_rate.age_human}</span>
-                      )}
                     </div>
                     <span className="calc-result__meta-value">{result.exchange_rate.cny_rub?.toFixed(2)} ₽/¥</span>
                   </div>
                 )}
 
-                {adminSettings?.delivery_time && (
+                {deliveryInfo.standard_days && (
                   <div className="calc-result__meta-row">
-                    <span>Срок доставки</span>
-                    <span className="calc-result__meta-value">{adminSettings.delivery_time}</span>
+                    <span>Обычная доставка до Москвы</span>
+                    <span className="calc-result__meta-value">{deliveryInfo.standard_days}</span>
                   </div>
                 )}
 
-                {adminSettings?.next_shipment_date && adminSettings.next_shipment_date !== '00.00.0000' && (
+                {deliveryInfo.express_days && (
                   <div className="calc-result__meta-row">
-                    <span>Ближайшая отправка</span>
-                    <span className="calc-result__meta-value">{adminSettings.next_shipment_date}</span>
+                    <span>Экспресс доставка до Москвы</span>
+                    <span className="calc-result__meta-value">{deliveryInfo.express_days}</span>
                   </div>
                 )}
+
+                {deliveryInfo.cdek_days && (
+                  <div className="calc-result__meta-row">
+                    <div className="calc-result__meta-copy">
+                      <span>СДЭК по России</span>
+                    </div>
+                    <span className="calc-result__meta-value">{deliveryInfo.cdek_days}</span>
+                  </div>
+                )}
+
               </section>
             </div>
           )}
@@ -2634,6 +3273,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
           <button
             className={`calc-result__cta-button pressable${isInCart ? ' done' : ''}${cartAdding ? ' loading' : ''}`}
+            data-order-guide-step-five-target={shouldShowOrderGuideStepFiveCtaTarget ? 'cta' : undefined}
             onClick={handleAddToCart}
             disabled={!canAddToCart}
           >
@@ -2648,155 +3288,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             )}
           </button>
         </div>
-
-        <BottomSheet
-          open={compareOpen}
-          onClose={() => setCompareOpen(false)}
-          className={compareSheetClassName}
-          badge={compareMarketName}
-          title={compareData?.query || product.name || ''}
-          bodyClassName="cmp-sheet__body"
-        >
-          <div className="cmp-sheet__content" data-shell-swipe-block="true">
-            {compareData?.status === 'antibot' && (
-              <StateSurface
-                title="Маркетплейс временно недоступен"
-                body={`${compareMarketName} сейчас не отдал стабильный ответ. Попробуйте позже или переключитесь на ${compareAlternateName}.`}
-                tone="error"
-                actionLabel="Попробовать снова"
-                onAction={() => handleCompare(compareMarket)}
-              />
-            )}
-
-            {compareData?.status === 'error' && (
-              <StateSurface
-                title="Ошибка сравнения"
-                body={compareData.error
-                  ? `Не удалось получить сравнение для ${compareMarketName}: ${compareData.error}. Попробуйте ещё раз или переключитесь на ${compareAlternateName}.`
-                  : `Не удалось получить сравнение для ${compareMarketName}. Попробуйте ещё раз или переключитесь на ${compareAlternateName}.`}
-                tone="error"
-                actionLabel="Попробовать снова"
-                onAction={() => handleCompare(compareMarket)}
-              />
-            )}
-
-            {compareData?.status === 'empty' && (
-              <StateSurface
-                title="Похожих товаров не нашли"
-                body={`На ${compareMarketName} сейчас не нашлось похожих предложений. Попробуйте позже или сравните с ${compareAlternateName}.`}
-              />
-            )}
-
-            {compareData?.status === 'ok' && compareData.items?.length > 0 && (() => {
-              const displayItems = compareShowAll && compareData.raw_items?.length > 0
-                ? compareData.raw_items
-                : compareData.items
-              const avgPrice = compareShowAll && compareData.raw_items?.length > 0
-                ? Math.round(compareData.raw_items.reduce((sum, item) => sum + item.price_rub, 0) / compareData.raw_items.length)
-                : compareData.avg_price
-              const ourPrice = compareData.our_price_rub || 0
-              const cheaperHere = avgPrice > ourPrice
-
-              return (
-                <>
-                  <div className="cmp-items">
-                    {displayItems.map((item, index) => (
-                      <a
-                        key={index}
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="cmp-card"
-                        onClick={() => haptic?.('light')}
-                      >
-                        <div className="cmp-card__rank">{index + 1}</div>
-                        {item.image_url && (
-                          <div className="cmp-card__img-wrap">
-                            <img src={proxyImageUrl(item.image_url)} alt="" className="cmp-card__img" loading="lazy" referrerPolicy="no-referrer" />
-                          </div>
-                        )}
-                        <div className="cmp-card__info">
-                          <p className="cmp-card__name">{item.name}</p>
-                          <div className="cmp-card__meta">
-                            <span className="cmp-card__price">{formatBuyerRub(item.price_rub)}</span>
-                            {item.rating > 0 && (
-                              <span className="cmp-card__rating">★ {item.rating.toFixed(1)}</span>
-                            )}
-                            {item.reviews > 0 && (
-                              <span className="cmp-card__reviews">
-                                {formatBuyerNumber(item.reviews)} отз.
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="cmp-card__arrow">
-                          <IconExternalLink size={16} />
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-
-                  {compareData.raw_items?.length > 0 && (
-                    <div className="cmp-show-all-wrap">
-                      <button
-                        className="cmp-show-all-btn pressable"
-                        onClick={() => {
-                          setCompareShowAll(!compareShowAll)
-                          haptic?.('light')
-                        }}
-                      >
-                        <span className={`cmp-show-all-btn__icon${compareShowAll ? ' open' : ''}`}>
-                          <IconChevronDown size={16} />
-                        </span>
-                        {compareShowAll
-                          ? `Свернуть до ${compareData.items.length}`
-                          : `Показать все товары (${compareData.raw_items.length})`
-                        }
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="cmp-summary">
-                    <div className="cmp-summary__row">
-                      <span className="cmp-summary__label">
-                        Средняя на {compareMarket === 'wb' ? 'WB' : 'Ozon'}
-                        {compareShowAll && <span className="cmp-summary__label-note"> (все {displayItems.length})</span>}
-                      </span>
-                      <span className="cmp-summary__value">
-                        {formatBuyerRub(avgPrice)}
-                      </span>
-                    </div>
-                    <div className="cmp-summary__divider" />
-                    <div className="cmp-summary__row cmp-summary__row--our">
-                      <span className="cmp-summary__label">Ваша цена у нас</span>
-                      <span className="cmp-summary__value cmp-summary__value--accent">
-                        {formatBuyerRub(ourPrice)}
-                      </span>
-                    </div>
-                    <div className={`cmp-verdict ${cheaperHere ? 'cmp-verdict--win' : 'cmp-verdict--lose'}`}>
-                      {cheaperHere ? (
-                        <>
-                          <span className="cmp-verdict__title">Выгоднее у нас</span>
-                          <span className="cmp-verdict__body">
-                            Средняя цена на маркетплейсе выше. Можно закрывать сравнение, добавлять товар в корзину и оформлять всё прямо здесь.
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="cmp-verdict__title cmp-verdict__title--alert">Осторожно!</span>
-                          <span className="cmp-verdict__body">
-                            Будьте внимательнее, скорее всего товар на маркетплейсе - это некачественная подделка
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-        </BottomSheet>
-      </div>
+        </div>
+        {orderGuideOverlay}
+      </>
     )
   }
 

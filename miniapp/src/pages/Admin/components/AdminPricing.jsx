@@ -4,6 +4,8 @@ import { fetchAdminSettings, updateAdminSetting } from '../../../api/admin.js'
 import { AdminSectionShell } from './AdminSectionShell.jsx'
 import {
   ADMIN_MOTION,
+  DELIVERY_PRICE_FIELDS,
+  DELIVERY_TIMING_FIELDS,
   PRICING_FIELDS,
   RATE_OVERRIDE_FIELD,
   formatExpiry,
@@ -19,6 +21,140 @@ const SCREEN_ENTRY = {
   transition: ADMIN_MOTION.standard,
 }
 
+const DISCLOSURE_CONFIG = [
+  {
+    id: 'delivery',
+    title: 'Доставка',
+    fields: DELIVERY_PRICE_FIELDS,
+    footer: 'СДЭК по России добавляется только в заявках, если город покупателя отличается от Москвы.',
+  },
+  {
+    id: 'timings',
+    title: 'Сроки доставки',
+    fields: DELIVERY_TIMING_FIELDS,
+    footer: 'Для регионов срок СДЭК по России показывается отдельно и добавляется к маршруту до Москвы.',
+  },
+]
+
+function PricingFieldCard({
+  field,
+  draft,
+  settings,
+  savingField,
+  isDirty,
+  onFieldChange,
+  onFieldSave,
+}) {
+  const dirty = isDirty(field)
+  const isSaving = savingField === field.key
+
+  return (
+    <section className={`admin-setting admin-pricing__field-card card ${dirty ? 'admin-setting--dirty admin-pricing__dirty' : ''}`}>
+      <div className="admin-pricing__field-head">
+        <div className="admin-setting__copy">
+          <h3 className="admin-setting__label">{field.label}</h3>
+          <p className="admin-setting__hint">{field.hint}</p>
+        </div>
+        <span className="admin-setting__preview">
+          {formatFieldPreview(field, settings?.[field.key])}
+        </span>
+      </div>
+      <div className="admin-pricing__field-row">
+        <label className={`admin-setting__input-wrap ${dirty ? 'admin-setting__input-wrap--dirty' : ''}`}>
+          <input
+            className="admin-setting__input"
+            type="text"
+            inputMode={field.inputMode || 'text'}
+            placeholder={field.placeholder}
+            value={draft[field.key] ?? ''}
+            onChange={(event) => onFieldChange(field.key, event.target.value)}
+          />
+          {field.suffix ? <span className="admin-setting__suffix">{field.suffix}</span> : null}
+        </label>
+        <div className="admin-pricing__field-actions">
+          <button
+            type="button"
+            className={`admin-setting__save admin-pricing__submit pressable ${dirty ? 'admin-setting__save--dirty' : ''}`}
+            onClick={() => onFieldSave(field)}
+            disabled={!dirty || isSaving}
+          >
+            {isSaving ? <span className="admin-setting__spinner" /> : dirty ? 'Сохранить' : 'Сохранено'}
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PricingDisclosure({
+  section,
+  open,
+  settings,
+  draft,
+  savingField,
+  isDirty,
+  onToggle,
+  onFieldChange,
+  onFieldSave,
+}) {
+  return (
+    <motion.section
+      className={`admin-pricing__disclosure card ${open ? 'admin-pricing__disclosure--open' : ''}`}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={ADMIN_MOTION.standard}
+    >
+      <button
+        type="button"
+        className="admin-pricing__disclosure-toggle pressable"
+        onClick={() => onToggle(section.id)}
+        aria-expanded={open}
+      >
+        <div className="admin-pricing__disclosure-copy">
+          <span className="admin-shell__eyebrow">{section.title}</span>
+          <h3 className="admin-pricing__disclosure-title">{section.title}</h3>
+        </div>
+        <div className="admin-pricing__disclosure-meta">
+          <span className={`admin-pricing__disclosure-button ${open ? 'admin-pricing__disclosure-button--open' : ''}`}>
+            <span className="admin-pricing__disclosure-button-label">{open ? 'Свернуть' : 'Открыть'}</span>
+            <span className={`admin-pricing__disclosure-chevron ${open ? 'admin-pricing__disclosure-chevron--open' : ''}`} aria-hidden="true">
+              ▾
+            </span>
+          </span>
+        </div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            className="admin-pricing__disclosure-body"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={ADMIN_MOTION.quick}
+          >
+            <div className="admin-pricing__disclosure-fields">
+              {section.fields.map((field) => (
+                <PricingFieldCard
+                  key={field.key}
+                  field={field}
+                  draft={draft}
+                  settings={settings}
+                  savingField={savingField}
+                  isDirty={isDirty}
+                  onFieldChange={onFieldChange}
+                  onFieldSave={onFieldSave}
+                />
+              ))}
+            </div>
+            <p className="admin-pricing__disclosure-note">{section.footer}</p>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.section>
+  )
+}
+
 export function AdminPricing({ initData, onBack, haptic }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -26,6 +162,10 @@ export function AdminPricing({ initData, onBack, haptic }) {
   const [draft, setDraft] = useState({})
   const [savingField, setSavingField] = useState('')
   const [notice, setNotice] = useState(null)
+  const [openSections, setOpenSections] = useState({
+    delivery: true,
+    timings: false,
+  })
 
   const applyPayload = useCallback((nextPayload, mode = 'replace', keys = []) => {
     setPayload(nextPayload)
@@ -57,7 +197,7 @@ export function AdminPricing({ initData, onBack, haptic }) {
     } catch (requestError) {
       const message = requestError.message || 'Не удалось загрузить расценки.'
 
-      if (mode === 'full' || !payload) {
+      if (mode === 'full') {
         setError(message)
       } else {
         setNotice({ type: 'error', text: message })
@@ -67,29 +207,11 @@ export function AdminPricing({ initData, onBack, haptic }) {
         setLoading(false)
       }
     }
-  }, [applyPayload, initData, payload])
+  }, [applyPayload, initData])
 
   useEffect(() => {
-    let mounted = true
-
-    fetchAdminSettings({ initData })
-      .then((data) => {
-        if (!mounted) return
-        applyPayload(data, 'replace')
-        setError('')
-      })
-      .catch((requestError) => {
-        if (!mounted) return
-        setError(requestError.message || 'Не удалось загрузить расценки.')
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [applyPayload, initData])
+    loadSettings({ mode: 'full' })
+  }, [loadSettings])
 
   const isDirty = (field) => (
     normalizeComparableValue(field, draft[field.key]) !==
@@ -127,6 +249,13 @@ export function AdminPricing({ initData, onBack, haptic }) {
       setSavingField('')
     }
   }
+
+  const toggleSection = useCallback((sectionId) => {
+    setOpenSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }))
+  }, [])
 
   const topbar = (
     <div className="admin-shell__topbar">
@@ -204,15 +333,15 @@ export function AdminPricing({ initData, onBack, haptic }) {
     : formatFieldPreview(RATE_OVERRIDE_FIELD, settings[RATE_OVERRIDE_FIELD.key])
   const rateOverrideNote = rateSourceIsManual
     ? `Ручной курс действует до ${formatExpiry(payload?.rate_override_expires_at)}.`
-    : 'Сейчас расчеты используют автоматический курс ЦБ.'
+    : 'Сейчас расчёты используют автоматический курс ЦБ.'
 
   const hero = (
     <section className="admin-pricing__hero card">
       <div className="admin-pricing__hero-copy">
         <span className="admin-shell__eyebrow">Тарифы и курс</span>
-        <h2 className="admin-pricing__hero-title">Управляй формулой расчета</h2>
+        <h2 className="admin-pricing__hero-title">Управляй формулой расчёта</h2>
         <p className="admin-pricing__hero-subtitle">
-          Эти значения сразу влияют на расчеты в боте и миниапп. Для каждого поля сохранение идет отдельно.
+          Комиссия, курс и доставка за 500 грамм сразу влияют на калькулятор, корзину и итоговую сумму в заявках.
         </p>
       </div>
     </section>
@@ -256,9 +385,7 @@ export function AdminPricing({ initData, onBack, haptic }) {
               <h3 className="admin-setting__label">{RATE_OVERRIDE_FIELD.label}</h3>
               <p className="admin-setting__hint">{RATE_OVERRIDE_FIELD.hint}</p>
             </div>
-            <span className="admin-setting__preview">
-              {rateOverridePreview}
-            </span>
+            <span className="admin-setting__preview">{rateOverridePreview}</span>
           </div>
           <div className="admin-pricing__field-row">
             <label className={`admin-setting__input-wrap ${rateOverrideDirty ? 'admin-setting__input-wrap--dirty' : ''}`}>
@@ -286,53 +413,39 @@ export function AdminPricing({ initData, onBack, haptic }) {
           <p className="admin-pricing__field-note">{rateOverrideNote}</p>
         </motion.section>
 
-        {PRICING_FIELDS.map((field, index) => {
-          const dirty = isDirty(field)
-          const isSaving = savingField === field.key
+        {PRICING_FIELDS.map((field, index) => (
+          <motion.div
+            key={field.key}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...ADMIN_MOTION.standard, delay: index * 0.02 }}
+          >
+            <PricingFieldCard
+              field={field}
+              draft={draft}
+              settings={settings}
+              savingField={savingField}
+              isDirty={isDirty}
+              onFieldChange={handleFieldChange}
+              onFieldSave={handleFieldSave}
+            />
+          </motion.div>
+        ))}
 
-          return (
-            <motion.section
-              key={field.key}
-              className={`admin-setting admin-pricing__field-card card ${dirty ? 'admin-setting--dirty admin-pricing__dirty' : ''}`}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ ...ADMIN_MOTION.standard, delay: index * 0.02 }}
-            >
-              <div className="admin-pricing__field-head">
-                <div className="admin-setting__copy">
-                  <h3 className="admin-setting__label">{field.label}</h3>
-                  <p className="admin-setting__hint">{field.hint}</p>
-                </div>
-                <span className="admin-setting__preview">
-                  {formatFieldPreview(field, settings[field.key])}
-                </span>
-              </div>
-              <div className="admin-pricing__field-row">
-                <label className={`admin-setting__input-wrap ${dirty ? 'admin-setting__input-wrap--dirty' : ''}`}>
-                  <input
-                    className="admin-setting__input"
-                    type="text"
-                    inputMode={field.inputMode || 'text'}
-                    placeholder={field.placeholder}
-                    value={draft[field.key] ?? ''}
-                    onChange={(event) => handleFieldChange(field.key, event.target.value)}
-                  />
-                  {field.suffix && <span className="admin-setting__suffix">{field.suffix}</span>}
-                </label>
-                <div className="admin-pricing__field-actions">
-                  <button
-                    type="button"
-                    className={`admin-setting__save admin-pricing__submit pressable ${dirty ? 'admin-setting__save--dirty' : ''}`}
-                    onClick={() => handleFieldSave(field)}
-                    disabled={!dirty || isSaving}
-                  >
-                    {isSaving ? <span className="admin-setting__spinner" /> : dirty ? 'Сохранить' : 'Сохранено'}
-                  </button>
-                </div>
-              </div>
-            </motion.section>
-          )
-        })}
+        {DISCLOSURE_CONFIG.map((section) => (
+          <PricingDisclosure
+            key={section.id}
+            section={section}
+            open={Boolean(openSections[section.id])}
+            settings={settings}
+            draft={draft}
+            savingField={savingField}
+            isDirty={isDirty}
+            onToggle={toggleSection}
+            onFieldChange={handleFieldChange}
+            onFieldSave={handleFieldSave}
+          />
+        ))}
       </AdminSectionShell>
     </motion.div>
   )

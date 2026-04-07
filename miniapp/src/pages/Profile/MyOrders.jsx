@@ -18,7 +18,6 @@ import { BUYER_MOTION } from '../../constants/buyerMotion'
 import { formatBuyerRub } from '../../constants/buyerNumbers'
 import { BUYER_STATE_COPY } from '../../constants/buyerStateContent'
 import { BUYER_STATUS_META } from '../../constants/buyerStatusMeta'
-import { PLATFORM_COLORS, PLATFORM_NAMES } from '../../constants/platformMeta'
 import { useTelegram } from '../../hooks/useTelegram'
 import { parseRepairJson, repairMojibakeDeep } from '../../utils/text'
 import './MyOrders.css'
@@ -189,8 +188,6 @@ function StatusTracker({ status }) {
 function OrderCard({ item, prefersReducedMotion, copiedTracking, onCopyTracking }) {
   const status = getOrderStatus(item)
   const statusMeta = BUYER_STATUS_META[status] || BUYER_STATUS_META.pending
-  const platformColor = PLATFORM_COLORS[item.platform] || '#555555'
-  const platformLabel = PLATFORM_NAMES[item.platform] || item.platform || 'Товар'
   const price = item.subtotal_rub || item.total_with_margin_rub || 0
   const imageUrl = getImageUrl(item.calc_json)
   const description = getDescription(item.calc_json)
@@ -202,7 +199,7 @@ function OrderCard({ item, prefersReducedMotion, copiedTracking, onCopyTracking 
   return (
     <motion.article
       className="myord-card card"
-      style={{ '--myord-status-color': statusMeta.color, '--myord-platform-color': platformColor }}
+      style={{ '--myord-status-color': statusMeta.color }}
       initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={prefersReducedMotion ? BUYER_MOTION.quick : BUYER_MOTION.standard}
@@ -228,15 +225,12 @@ function OrderCard({ item, prefersReducedMotion, copiedTracking, onCopyTracking 
         <ProductThumb
           src={imageUrl}
           alt=""
-          fallbackLabel={platformLabel}
+          fallbackLabel={item.short_name || item.name || 'Товар'}
           className="myord-card__thumb"
           size="md"
         />
 
         <div className="myord-card__product-copy">
-          <div className="myord-card__product-meta">
-            <span className="myord-card__product-platform">{platformLabel}</span>
-          </div>
           <p className="myord-card__product-name">{item.short_name || item.name || 'Товар'}</p>
           {description ? <p className="myord-card__product-desc">{description}</p> : null}
           <span className="myord-card__product-price">{formatBuyerRub(price)}</span>

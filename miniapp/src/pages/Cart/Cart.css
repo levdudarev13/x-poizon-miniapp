@@ -1,5 +1,10 @@
-﻿.cart-page {
+.cart-page {
   padding-bottom: var(--shell-bottom-action-offset);
+}
+
+.cart-page--guide-preview {
+  min-height: 100dvh;
+  padding-bottom: 0;
 }
 
 .cart-page .page-content {
@@ -62,7 +67,7 @@
 .cart-checkbox--checked {
   background: var(--accent);
   border-color: var(--accent);
-  color: #000;
+  color: var(--text-on-accent);
 }
 
 /* ── Skeleton ── */
@@ -294,17 +299,6 @@
   -webkit-box-orient: vertical;
 }
 
-.cart-card__meta-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.cart-card__platform {
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .cart-card__price {
   font-size: var(--buyer-number-price-size);
   line-height: var(--buyer-number-price-line);
@@ -424,11 +418,11 @@
 .cart-footer__submit--selected {
   border-color: rgba(255, 255, 255, 0.12);
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent) 48%, var(--accent-dark) 100%);
-  color: #031313;
+  color: var(--text-on-accent);
   box-shadow:
     0 18px 28px rgba(0, 0, 0, 0.22),
     0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 0 18px rgba(198, 255, 46, 0.22);
+    0 0 18px rgba(var(--accent-rgb), 0.22);
 }
 
 .cart-footer__submit--idle,
@@ -491,7 +485,7 @@
     box-shadow:
       0 20px 30px rgba(0, 0, 0, 0.24),
       0 0 0 1px rgba(255, 255, 255, 0.2),
-      0 0 32px rgba(198, 255, 46, 0.4);
+      0 0 32px rgba(var(--accent-rgb), 0.4);
   }
 }
 
@@ -500,7 +494,7 @@
     box-shadow:
       0 18px 28px rgba(0, 0, 0, 0.22),
       0 0 0 1px rgba(255, 255, 255, 0.12),
-      0 0 18px rgba(198, 255, 46, 0.22);
+      0 0 18px rgba(var(--accent-rgb), 0.22);
   }
 }
 
@@ -741,6 +735,12 @@
   font-size: 12px;
 }
 
+.cart-detail__info-note {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .cart-detail__sheet-actions {
   display: flex;
   gap: var(--space-sm);
@@ -867,7 +867,7 @@
 .cart-detail__action-btn--order {
   flex: 1;
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-  color: #000;
+  color: var(--text-on-accent);
   box-shadow: 0 4px 16px var(--accent-glow);
 }
 

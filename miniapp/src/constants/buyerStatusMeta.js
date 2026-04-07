@@ -14,13 +14,13 @@ export const BUYER_STATUS_META = {
   paid: {
     label: 'Оплачен',
     tone: 'progress',
-    color: '#3B82F6',
+    color: '#15ffcc',
     iconName: 'IconStatusPaid',
   },
   shipped: {
     label: 'Отправлен',
     tone: 'progress',
-    color: '#3B82F6',
+    color: '#12efac',
     iconName: 'IconStatusShipped',
   },
   arrived: {

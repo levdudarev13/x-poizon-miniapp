@@ -24,6 +24,24 @@ const ACCESS_STATUS_META = {
 
 export function AdminLauncher({ authStatus, onOpenSection }) {
   const statusMeta = ACCESS_STATUS_META[authStatus] || ACCESS_STATUS_META.idle
+  const launcherSections = [
+    ...SECTIONS.slice(0, 4),
+    {
+      id: 'banners',
+      label: 'Баннеры',
+      icon: 'showcase',
+      desc: 'Промо-карусель и popup-окна',
+      available: true,
+    },
+    {
+      id: 'about-carousel',
+      label: '\u041e \u043d\u0430\u0441',
+      icon: 'about-carousel',
+      desc: '\u0424\u043e\u0442\u043e \u043a\u0430\u0440\u0443\u0441\u0435\u043b\u0438 2:3',
+      available: true,
+    },
+    ...SECTIONS.slice(4),
+  ]
 
   const hero = (
     <section className="admin-launcher__hero">
@@ -53,7 +71,7 @@ export function AdminLauncher({ authStatus, onOpenSection }) {
       contentClassName="admin-shell__grid admin-launcher__grid"
       data-shell-swipe-block="true"
     >
-      {SECTIONS.map(({ id, label, icon, desc, available }, index) => {
+      {launcherSections.map(({ id, label, icon, desc, available }, index) => {
         const isOpenable = available && authStatus === 'ready'
 
         return (

@@ -1,0 +1,88 @@
+.magicui-iphone {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  vertical-align: middle;
+  line-height: 0;
+  filter:
+    drop-shadow(0 10px 18px rgba(0, 0, 0, 0.26))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.22));
+}
+
+.magicui-iphone .pointer-events-none {
+  pointer-events: none;
+}
+
+.magicui-iphone .absolute {
+  position: absolute;
+}
+
+.magicui-iphone .z-0 {
+  z-index: 0;
+}
+
+.magicui-iphone .overflow-hidden {
+  overflow: hidden;
+}
+
+.magicui-iphone .block {
+  display: block;
+}
+
+.magicui-iphone .size-full {
+  width: 100%;
+  height: 100%;
+}
+
+.magicui-iphone .object-cover {
+  object-fit: cover;
+}
+
+.magicui-iphone .object-top {
+  object-position: top;
+}
+
+.magicui-iphone .inset-0 {
+  inset: 0;
+}
+
+.magicui-iphone .fill-\[\#E5E5E5\] {
+  fill: #050507;
+}
+
+.magicui-iphone .fill-white {
+  fill: #111218;
+}
+
+.magicui-iphone .stroke-\[\#E5E5E5\] {
+  stroke: #2b2f39;
+}
+
+.magicui-iphone .stroke-\[0\.5\] {
+  stroke-width: 0.5px;
+}
+
+.magicui-iphone .fill-\[\#F5F5F5\] {
+  fill: #1a1c23;
+}
+
+html.dark .magicui-iphone .dark\:fill-\[\#404040\],
+body.dark .magicui-iphone .dark\:fill-\[\#404040\],
+[data-theme='dark'] .magicui-iphone .dark\:fill-\[\#404040\],
+.theme-dark .magicui-iphone .dark\:fill-\[\#404040\] {
+  fill: #050507;
+}
+
+html.dark .magicui-iphone .dark\:stroke-\[\#404040\],
+body.dark .magicui-iphone .dark\:stroke-\[\#404040\],
+[data-theme='dark'] .magicui-iphone .dark\:stroke-\[\#404040\],
+.theme-dark .magicui-iphone .dark\:stroke-\[\#404040\] {
+  stroke: #2b2f39;
+}
+
+html.dark .magicui-iphone .dark\:fill-\[\#262626\],
+body.dark .magicui-iphone .dark\:fill-\[\#262626\],
+[data-theme='dark'] .magicui-iphone .dark\:fill-\[\#262626\],
+.theme-dark .magicui-iphone .dark\:fill-\[\#262626\] {
+  fill: #111218;
+}

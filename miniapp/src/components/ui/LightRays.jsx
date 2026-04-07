@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Renderer, Program, Triangle, Mesh } from 'ogl'
 import './LightRays.css'
 
-const DEFAULT_COLOR = '#c6ff2e'
+const DEFAULT_COLOR = '#15ffcc'
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value))

@@ -15,6 +15,23 @@ from miniapp_server import (
 )
 
 
+def build_admin_settings(**overrides):
+    settings = {
+        "commission_pct": "10.0",
+        "min_commission_rub": "300.0",
+        "delivery_air_moscow_rub_500g": "1400.0",
+        "delivery_standard_moscow_rub_500g": "500.0",
+        "delivery_cdek_russia_rub_500g": "150.0",
+        "delivery_air_moscow_days": "5-10 дней",
+        "delivery_standard_moscow_days": "15-25 дней",
+        "delivery_cdek_russia_days": "2-5 дней",
+        "rate_override": "",
+        "rate_override_until": "0",
+    }
+    settings.update(overrides)
+    return settings
+
+
 class AdminSettingsHelpersTests(unittest.TestCase):
     def test_track_active_request_restores_counter_after_exception(self) -> None:
         baseline = miniapp_server.active_requests
@@ -98,17 +115,12 @@ class AdminSettingsHelpersTests(unittest.TestCase):
             _build_admin_settings_updates("unknown_field", "1")
 
     def test_admin_settings_payload_marks_manual_rate_as_active(self) -> None:
-        settings = {
-            "commission_pct": "11.0",
-            "min_commission_rub": "300.0",
-            "logistics_rub": "500.0",
-            "insurance_rub": "200.0",
-            "price_per_kg": "250.0",
-            "delivery_time": "РґРѕ 2 РЅРµРґРµР»СЊ",
-            "next_shipment_date": "25.03.2026",
-            "rate_override": "12.7",
-            "rate_override_until": "2000",
-        }
+        settings = build_admin_settings(
+            commission_pct="11.0",
+            delivery_standard_moscow_days="12-18 дней",
+            rate_override="12.7",
+            rate_override_until="2000",
+        )
 
         with patch(
             "miniapp_server.db.get_admin_settings",
@@ -134,23 +146,16 @@ class AdminSettingsHelpersTests(unittest.TestCase):
         self.assertEqual(payload["rate_source"], "manual")
         self.assertTrue(payload["rate_override_active"])
         self.assertEqual(payload["settings"]["commission_pct"], "11.0")
-        self.assertIn("next_shipment_date", payload["settings"])
-        self.assertEqual(payload["settings"]["next_shipment_date"], "25.03.2026")
+        self.assertEqual(payload["settings"]["delivery_standard_moscow_days"], "12-18 дней")
+        self.assertNotIn("next_shipment_date", payload["settings"])
         self.assertEqual(payload["effective_rate"], 12.7)
         self.assertEqual(payload["rate_override_expires_at"], datetime.fromtimestamp(2000).isoformat())
 
     def test_admin_settings_payload_falls_back_to_cbr_after_expiry(self) -> None:
-        settings = {
-            "commission_pct": "10.0",
-            "min_commission_rub": "300.0",
-            "logistics_rub": "500.0",
-            "insurance_rub": "200.0",
-            "price_per_kg": "250.0",
-            "delivery_time": "РґРѕ 2 РЅРµРґРµР»СЊ",
-            "next_shipment_date": "00.00.0000",
-            "rate_override": "12.7",
-            "rate_override_until": "1000",
-        }
+        settings = build_admin_settings(
+            rate_override="12.7",
+            rate_override_until="1000",
+        )
 
         with patch(
             "miniapp_server.db.get_admin_settings",
@@ -176,8 +181,8 @@ class AdminSettingsHelpersTests(unittest.TestCase):
         self.assertEqual(payload["rate_source"], "cbr")
         self.assertFalse(payload["rate_override_active"])
         self.assertIsNone(payload["rate_override_expires_at"])
-        self.assertIn("next_shipment_date", payload["settings"])
-        self.assertEqual(payload["settings"]["next_shipment_date"], "00.00.0000")
+        self.assertEqual(payload["settings"]["delivery_air_moscow_days"], "5-10 дней")
+        self.assertEqual(payload["settings"]["delivery_cdek_russia_rub_500g"], "150.0")
         self.assertEqual(payload["effective_rate"], 11.9)
 
     def test_admin_showcase_payload_returns_cached_items_and_links(self) -> None:
@@ -208,13 +213,7 @@ class AdminSettingsHelpersTests(unittest.TestCase):
             new=AsyncMock(return_value=slots),
         ), patch(
             "miniapp_server.db.get_admin_settings",
-            new=AsyncMock(return_value={
-                "commission_pct": "10.0",
-                "min_commission_rub": "300.0",
-                "logistics_rub": "500.0",
-                "insurance_rub": "200.0",
-                "price_per_kg": "250.0",
-            }),
+            new=AsyncMock(return_value=build_admin_settings()),
         ), patch(
             "miniapp_server.get_effective_rate",
             new=AsyncMock(return_value=13.0),
@@ -274,13 +273,7 @@ class AdminSettingsHelpersTests(unittest.TestCase):
             new=AsyncMock(return_value=slots),
         ), patch(
             "miniapp_server.db.get_admin_settings",
-            new=AsyncMock(return_value={
-                "commission_pct": "10.0",
-                "min_commission_rub": "300.0",
-                "logistics_rub": "500.0",
-                "insurance_rub": "200.0",
-                "price_per_kg": "250.0",
-            }),
+            new=AsyncMock(return_value=build_admin_settings()),
         ), patch(
             "miniapp_server.get_effective_rate",
             new=AsyncMock(return_value=13.0),
@@ -323,13 +316,7 @@ class AdminSettingsHelpersTests(unittest.TestCase):
             new=AsyncMock(return_value=slots),
         ), patch(
             "miniapp_server.db.get_admin_settings",
-            new=AsyncMock(return_value={
-                "commission_pct": "10.0",
-                "min_commission_rub": "300.0",
-                "logistics_rub": "500.0",
-                "insurance_rub": "200.0",
-                "price_per_kg": "250.0",
-            }),
+            new=AsyncMock(return_value=build_admin_settings()),
         ), patch(
             "miniapp_server.get_effective_rate",
             new=AsyncMock(return_value=13.0),
@@ -389,13 +376,7 @@ class AdminSettingsHelpersTests(unittest.TestCase):
             new=AsyncMock(),
         ) as save_slot_mock, patch(
             "miniapp_server.db.get_admin_settings",
-            new=AsyncMock(return_value={
-                "commission_pct": "10.0",
-                "min_commission_rub": "300.0",
-                "logistics_rub": "500.0",
-                "insurance_rub": "200.0",
-                "price_per_kg": "250.0",
-            }),
+            new=AsyncMock(return_value=build_admin_settings()),
         ), patch(
             "miniapp_server.get_effective_rate",
             new=AsyncMock(return_value=13.0),
@@ -450,13 +431,7 @@ class AdminSettingsHelpersTests(unittest.TestCase):
             }),
         ) as parse_product_mock, patch(
             "miniapp_server.db.get_admin_settings",
-            new=AsyncMock(return_value={
-                "commission_pct": "10.0",
-                "min_commission_rub": "300.0",
-                "logistics_rub": "500.0",
-                "insurance_rub": "200.0",
-                "price_per_kg": "250.0",
-            }),
+            new=AsyncMock(return_value=build_admin_settings()),
         ), patch(
             "miniapp_server.get_effective_rate",
             new=AsyncMock(return_value=13.0),

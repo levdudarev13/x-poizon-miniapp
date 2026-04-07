@@ -3,6 +3,8 @@ import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import miniapp_server
+
 from miniapp_server import (
     _normalize_delivery_payload,
     _save_delivery_profile_payload,
@@ -160,6 +162,9 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
             "miniapp_server.db.cart_submit_order",
             new=AsyncMock(side_effect=record_submit),
         ) as submit_mock, patch(
+            "miniapp_server._apply_order_delivery_pricing",
+            new=AsyncMock(side_effect=lambda *args, **kwargs: call_order.append("pricing")),
+        ) as pricing_mock, patch(
             "miniapp_server.time.time",
             return_value=1_700_000_000.123,
         ), patch(
@@ -173,6 +178,19 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
         self.assertEqual(submission_batch_id, "sub-42-1700000000123")
         self.assertEqual(submitted_at, fixed_submitted_at)
         datetime.fromisoformat(submitted_at)
+        pricing_mock.assert_awaited_once_with(
+            42,
+            {
+                "recipient_name": "Alice Example",
+                "phone": "+7 999 000-00-00",
+                "city": "Moscow",
+                "street": "Tverskaya",
+                "house": "7B",
+                "apartment": "14",
+                "comment": "call first",
+            },
+            delivery_type="standard",
+        )
         snapshot_mock.assert_awaited_once_with(
             42,
             {
@@ -188,7 +206,7 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
             submitted_at,
         )
         submit_mock.assert_awaited_once_with(42)
-        self.assertEqual(call_order, ["snapshot", "submit"])
+        self.assertEqual(call_order, ["pricing", "snapshot", "submit"])
         self.assertEqual(
             payload,
             {
@@ -197,6 +215,43 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
                 "submitted_at": fixed_submitted_at,
             },
         )
+
+    def test_submit_order_payload_passes_express_delivery_type_to_repricing(self) -> None:
+        with patch(
+            "miniapp_server.db.get_delivery_profile",
+            new=AsyncMock(
+                return_value={
+                    "recipient_name": "Alice Example",
+                    "phone": "+7 999 000-00-00",
+                    "city": "Saint Petersburg",
+                    "street": "Nevsky",
+                    "house": "10",
+                    "apartment": "",
+                    "comment": "",
+                    "updated_at": "2026-03-24 18:00:00",
+                }
+            ),
+        ), patch(
+            "miniapp_server._apply_order_delivery_pricing",
+            new=AsyncMock(),
+        ) as pricing_mock, patch(
+            "miniapp_server.db.cart_apply_delivery_snapshot",
+            new=AsyncMock(),
+        ), patch(
+            "miniapp_server.db.cart_submit_order",
+            new=AsyncMock(),
+        ), patch(
+            "miniapp_server.time.time",
+            return_value=1_700_000_100.0,
+        ), patch(
+            "miniapp_server.datetime",
+        ) as datetime_mock:
+            datetime_mock.utcnow.return_value = datetime.fromisoformat("2026-03-24T18:00:00")
+            asyncio.run(_submit_order_payload({"user_id": 42, "delivery_type": "express"}))
+
+        pricing_mock.assert_awaited_once()
+        self.assertEqual(pricing_mock.await_args.args[0], 42)
+        self.assertEqual(pricing_mock.await_args.kwargs["delivery_type"], "express")
 
 
 if __name__ == "__main__":
