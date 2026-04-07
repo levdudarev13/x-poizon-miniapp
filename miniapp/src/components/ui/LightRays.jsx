@@ -43,6 +43,26 @@ function getAnchorAndDir(origin, width, height) {
   }
 }
 
+function supportsIntersectionObserver() {
+  return typeof window !== 'undefined' && typeof window.IntersectionObserver === 'function'
+}
+
+function supportsWebGL() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false
+  }
+
+  try {
+    const canvas = document.createElement('canvas')
+    return Boolean(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')),
+    )
+  } catch {
+    return false
+  }
+}
+
 export default function LightRays({
   raysOrigin = 'top-center',
   raysColor = DEFAULT_COLOR,
@@ -73,14 +93,24 @@ export default function LightRays({
     const element = containerRef.current
     if (!element) return undefined
 
-    observerRef.current = new IntersectionObserver(
-      ([entry]) => {
-        setIsVisible(Boolean(entry?.isIntersecting))
-      },
-      { threshold: 0.1 },
-    )
+    if (!supportsIntersectionObserver()) {
+      setIsVisible(true)
+      return undefined
+    }
 
-    observerRef.current.observe(element)
+    try {
+      observerRef.current = new IntersectionObserver(
+        ([entry]) => {
+          setIsVisible(Boolean(entry?.isIntersecting))
+        },
+        { threshold: 0.1 },
+      )
+
+      observerRef.current.observe(element)
+    } catch (error) {
+      console.warn('LightRays observer disabled:', error)
+      setIsVisible(true)
+    }
 
     return () => {
       observerRef.current?.disconnect()
@@ -100,23 +130,28 @@ export default function LightRays({
       await new Promise((resolve) => window.setTimeout(resolve, 10))
       if (cancelled || !containerRef.current) return
 
-      const renderer = new Renderer({
-        dpr: Math.min(window.devicePixelRatio || 1, 2),
-        alpha: true,
-      })
-      rendererRef.current = renderer
-
-      const { gl } = renderer
-      gl.canvas.style.width = '100%'
-      gl.canvas.style.height = '100%'
-      gl.canvas.style.display = 'block'
-
-      while (containerRef.current.firstChild) {
-        containerRef.current.removeChild(containerRef.current.firstChild)
+      if (!supportsWebGL()) {
+        return
       }
-      containerRef.current.appendChild(gl.canvas)
 
-      const vertex = `
+      try {
+        const renderer = new Renderer({
+          dpr: Math.min(window.devicePixelRatio || 1, 2),
+          alpha: true,
+        })
+        rendererRef.current = renderer
+
+        const { gl } = renderer
+        gl.canvas.style.width = '100%'
+        gl.canvas.style.height = '100%'
+        gl.canvas.style.display = 'block'
+
+        while (containerRef.current.firstChild) {
+          containerRef.current.removeChild(containerRef.current.firstChild)
+        }
+        containerRef.current.appendChild(gl.canvas)
+
+        const vertex = `
         attribute vec2 position;
         varying vec2 vUv;
 
@@ -126,7 +161,7 @@ export default function LightRays({
         }
       `
 
-      const fragment = `
+        const fragment = `
         precision highp float;
 
         uniform float iTime;
@@ -243,96 +278,101 @@ export default function LightRays({
         }
       `
 
-      const uniforms = {
-        iTime: { value: 0 },
-        iResolution: { value: [1, 1] },
-        rayPos: { value: [0, 0] },
-        rayDir: { value: [0, 1] },
-        raysColor: { value: hexToRgb(raysColor) },
-        raysSpeed: { value: raysSpeed },
-        lightSpread: { value: lightSpread },
-        rayLength: { value: rayLength },
-        pulsating: { value: pulsating ? 1 : 0 },
-        fadeDistance: { value: fadeDistance },
-        saturation: { value: saturation },
-        mousePos: { value: [0.5, 0.5] },
-        mouseInfluence: { value: mouseInfluence },
-        noiseAmount: { value: noiseAmount },
-        distortion: { value: distortion },
-      }
-      uniformsRef.current = uniforms
+        const uniforms = {
+          iTime: { value: 0 },
+          iResolution: { value: [1, 1] },
+          rayPos: { value: [0, 0] },
+          rayDir: { value: [0, 1] },
+          raysColor: { value: hexToRgb(raysColor) },
+          raysSpeed: { value: raysSpeed },
+          lightSpread: { value: lightSpread },
+          rayLength: { value: rayLength },
+          pulsating: { value: pulsating ? 1 : 0 },
+          fadeDistance: { value: fadeDistance },
+          saturation: { value: saturation },
+          mousePos: { value: [0.5, 0.5] },
+          mouseInfluence: { value: mouseInfluence },
+          noiseAmount: { value: noiseAmount },
+          distortion: { value: distortion },
+        }
+        uniformsRef.current = uniforms
 
-      const geometry = new Triangle(gl)
-      const program = new Program(gl, {
-        vertex,
-        fragment,
-        uniforms,
-      })
-      const mesh = new Mesh(gl, { geometry, program })
-      meshRef.current = mesh
+        const geometry = new Triangle(gl)
+        const program = new Program(gl, {
+          vertex,
+          fragment,
+          uniforms,
+        })
+        const mesh = new Mesh(gl, { geometry, program })
+        meshRef.current = mesh
 
-      const updatePlacement = () => {
-        if (!containerRef.current || !rendererRef.current || !uniformsRef.current) return
+        const updatePlacement = () => {
+          if (!containerRef.current || !rendererRef.current || !uniformsRef.current) return
 
-        rendererRef.current.dpr = Math.min(window.devicePixelRatio || 1, 2)
+          rendererRef.current.dpr = Math.min(window.devicePixelRatio || 1, 2)
 
-        const { clientWidth, clientHeight } = containerRef.current
-        rendererRef.current.setSize(clientWidth, clientHeight)
+          const { clientWidth, clientHeight } = containerRef.current
+          rendererRef.current.setSize(clientWidth, clientHeight)
 
-        const width = clientWidth * rendererRef.current.dpr
-        const height = clientHeight * rendererRef.current.dpr
-        const { anchor, dir } = getAnchorAndDir(raysOrigin, width, height)
+          const width = clientWidth * rendererRef.current.dpr
+          const height = clientHeight * rendererRef.current.dpr
+          const { anchor, dir } = getAnchorAndDir(raysOrigin, width, height)
 
-        uniformsRef.current.iResolution.value = [width, height]
-        uniformsRef.current.rayPos.value = anchor
-        uniformsRef.current.rayDir.value = dir
-      }
-
-      const renderFrame = (time) => {
-        if (!rendererRef.current || !uniformsRef.current || !meshRef.current) return
-
-        uniformsRef.current.iTime.value = time * 0.001
-
-        if (followMouse && mouseInfluence > 0) {
-          const smoothing = 0.92
-          smoothMouseRef.current.x = smoothMouseRef.current.x * smoothing + mouseRef.current.x * (1 - smoothing)
-          smoothMouseRef.current.y = smoothMouseRef.current.y * smoothing + mouseRef.current.y * (1 - smoothing)
-          uniformsRef.current.mousePos.value = [smoothMouseRef.current.x, smoothMouseRef.current.y]
+          uniformsRef.current.iResolution.value = [width, height]
+          uniformsRef.current.rayPos.value = anchor
+          uniformsRef.current.rayDir.value = dir
         }
 
-        try {
-          rendererRef.current.render({ scene: meshRef.current })
-          animationFrameRef.current = window.requestAnimationFrame(renderFrame)
-        } catch (error) {
-          console.warn('LightRays render error:', error)
-        }
-      }
+        const renderFrame = (time) => {
+          if (!rendererRef.current || !uniformsRef.current || !meshRef.current) return
 
-      window.addEventListener('resize', updatePlacement)
-      updatePlacement()
-      animationFrameRef.current = window.requestAnimationFrame(renderFrame)
+          uniformsRef.current.iTime.value = time * 0.001
 
-      cleanupRef.current = () => {
-        if (animationFrameRef.current) {
-          window.cancelAnimationFrame(animationFrameRef.current)
-          animationFrameRef.current = null
-        }
+          if (followMouse && mouseInfluence > 0) {
+            const smoothing = 0.92
+            smoothMouseRef.current.x = smoothMouseRef.current.x * smoothing + mouseRef.current.x * (1 - smoothing)
+            smoothMouseRef.current.y = smoothMouseRef.current.y * smoothing + mouseRef.current.y * (1 - smoothing)
+            uniformsRef.current.mousePos.value = [smoothMouseRef.current.x, smoothMouseRef.current.y]
+          }
 
-        window.removeEventListener('resize', updatePlacement)
-
-        if (rendererRef.current?.gl) {
-          const canvas = rendererRef.current.gl.canvas
-          const loseContext = rendererRef.current.gl.getExtension('WEBGL_lose_context')
-          loseContext?.loseContext()
-
-          if (canvas?.parentNode) {
-            canvas.parentNode.removeChild(canvas)
+          try {
+            rendererRef.current.render({ scene: meshRef.current })
+            animationFrameRef.current = window.requestAnimationFrame(renderFrame)
+          } catch (error) {
+            console.warn('LightRays render error:', error)
           }
         }
 
-        rendererRef.current = null
-        uniformsRef.current = null
-        meshRef.current = null
+        window.addEventListener('resize', updatePlacement)
+        updatePlacement()
+        animationFrameRef.current = window.requestAnimationFrame(renderFrame)
+
+        cleanupRef.current = () => {
+          if (animationFrameRef.current) {
+            window.cancelAnimationFrame(animationFrameRef.current)
+            animationFrameRef.current = null
+          }
+
+          window.removeEventListener('resize', updatePlacement)
+
+          if (rendererRef.current?.gl) {
+            const canvas = rendererRef.current.gl.canvas
+            const loseContext = rendererRef.current.gl.getExtension('WEBGL_lose_context')
+            loseContext?.loseContext()
+
+            if (canvas?.parentNode) {
+              canvas.parentNode.removeChild(canvas)
+            }
+          }
+
+          rendererRef.current = null
+          uniformsRef.current = null
+          meshRef.current = null
+        }
+      } catch (error) {
+        console.warn('LightRays disabled:', error)
+        cleanupRef.current?.()
+        cleanupRef.current = null
       }
     }
 

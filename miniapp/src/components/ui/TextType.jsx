@@ -66,39 +66,55 @@ export default function TextType({
   useEffect(() => {
     if (!startOnVisible || !containerRef.current) return undefined
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsVisible(true)
-          }
-        })
-      },
-      { threshold: 0.1 },
-    )
+    if (typeof window.IntersectionObserver !== 'function') {
+      setIsVisible(true)
+      return undefined
+    }
 
-    observer.observe(containerRef.current)
-    return () => observer.disconnect()
+    try {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              setIsVisible(true)
+            }
+          })
+        },
+        { threshold: 0.1 },
+      )
+
+      observer.observe(containerRef.current)
+      return () => observer.disconnect()
+    } catch (error) {
+      console.warn('TextType observer disabled:', error)
+      setIsVisible(true)
+      return undefined
+    }
   }, [startOnVisible])
 
   useEffect(() => {
     const cursorNode = cursorRef.current
     if (!showCursor || !cursorNode) return undefined
 
-    gsap.killTweensOf(cursorNode)
-    gsap.set(cursorNode, { opacity: 1 })
-
-    const tween = gsap.to(cursorNode, {
-      opacity: 0,
-      duration: cursorBlinkDuration,
-      repeat: -1,
-      yoyo: true,
-      ease: 'power2.inOut',
-    })
-
-    return () => {
-      tween.kill()
+    try {
       gsap.killTweensOf(cursorNode)
+      gsap.set(cursorNode, { opacity: 1 })
+
+      const tween = gsap.to(cursorNode, {
+        opacity: 0,
+        duration: cursorBlinkDuration,
+        repeat: -1,
+        yoyo: true,
+        ease: 'power2.inOut',
+      })
+
+      return () => {
+        tween.kill()
+        gsap.killTweensOf(cursorNode)
+      }
+    } catch (error) {
+      console.warn('TextType cursor animation disabled:', error)
+      return undefined
     }
   }, [showCursor, cursorBlinkDuration])
 

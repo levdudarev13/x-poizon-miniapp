@@ -55,79 +55,89 @@ export default function FadeContent({
     const element = ref.current
     if (!element) return undefined
 
-    if (!enabled) {
-      clearRevealProps(element)
-      return undefined
-    }
+    try {
+      if (!enabled) {
+        clearRevealProps(element)
+        return undefined
+      }
 
-    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    if (prefersReducedMotion) {
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      if (prefersReducedMotion) {
+        gsap.set(element, {
+          autoAlpha: 1,
+          filter: 'blur(0px)',
+        })
+        clearRevealProps(element)
+        return undefined
+      }
+
+      const scrollerTarget = resolveScrollerTarget(container)
+      const startPct = (1 - threshold) * 100
+      const hiddenFilter = blur ? 'blur(10px)' : 'blur(0px)'
+      let disappearanceTween = null
+
+      gsap.set(element, {
+        autoAlpha: initialOpacity,
+        filter: hiddenFilter,
+        willChange: 'opacity, filter',
+      })
+
+      const timeline = gsap.timeline({
+        paused: true,
+        delay: toSeconds(delay),
+        onComplete: () => {
+          clearRevealProps(element)
+          onComplete?.()
+
+          if (disappearAfter > 0) {
+            gsap.set(element, { willChange: 'opacity, filter' })
+            disappearanceTween = gsap.to(element, {
+              autoAlpha: initialOpacity,
+              filter: hiddenFilter,
+              delay: toSeconds(disappearAfter),
+              duration: toSeconds(disappearDuration),
+              ease: disappearEase,
+              onComplete: () => {
+                clearRevealProps(element)
+                onDisappearanceComplete?.()
+              },
+            })
+          }
+        },
+      })
+
+      timeline.to(element, {
+        autoAlpha: 1,
+        filter: 'blur(0px)',
+        duration: toSeconds(duration),
+        ease,
+      })
+
+      const trigger = ScrollTrigger.create({
+        trigger: element,
+        scroller: scrollerTarget || undefined,
+        start: `top ${startPct}%`,
+        once: true,
+        onEnter: () => timeline.play(),
+      })
+
+      ScrollTrigger.refresh()
+
+      return () => {
+        trigger.kill()
+        timeline.kill()
+        disappearanceTween?.kill()
+        gsap.killTweensOf(element)
+        clearRevealProps(element)
+      }
+    } catch (error) {
+      console.warn('FadeContent animation disabled:', error)
       gsap.set(element, {
         autoAlpha: 1,
         filter: 'blur(0px)',
       })
       clearRevealProps(element)
       return undefined
-    }
-
-    const scrollerTarget = resolveScrollerTarget(container)
-    const startPct = (1 - threshold) * 100
-    const hiddenFilter = blur ? 'blur(10px)' : 'blur(0px)'
-    let disappearanceTween = null
-
-    gsap.set(element, {
-      autoAlpha: initialOpacity,
-      filter: hiddenFilter,
-      willChange: 'opacity, filter',
-    })
-
-    const timeline = gsap.timeline({
-      paused: true,
-      delay: toSeconds(delay),
-      onComplete: () => {
-        clearRevealProps(element)
-        onComplete?.()
-
-        if (disappearAfter > 0) {
-          gsap.set(element, { willChange: 'opacity, filter' })
-          disappearanceTween = gsap.to(element, {
-            autoAlpha: initialOpacity,
-            filter: hiddenFilter,
-            delay: toSeconds(disappearAfter),
-            duration: toSeconds(disappearDuration),
-            ease: disappearEase,
-            onComplete: () => {
-              clearRevealProps(element)
-              onDisappearanceComplete?.()
-            },
-          })
-        }
-      },
-    })
-
-    timeline.to(element, {
-      autoAlpha: 1,
-      filter: 'blur(0px)',
-      duration: toSeconds(duration),
-      ease,
-    })
-
-    const trigger = ScrollTrigger.create({
-      trigger: element,
-      scroller: scrollerTarget || undefined,
-      start: `top ${startPct}%`,
-      once: true,
-      onEnter: () => timeline.play(),
-    })
-
-    ScrollTrigger.refresh()
-
-    return () => {
-      trigger.kill()
-      timeline.kill()
-      disappearanceTween?.kill()
-      gsap.killTweensOf(element)
-      clearRevealProps(element)
     }
   }, [
     blur,
