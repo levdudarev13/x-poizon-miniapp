@@ -29,6 +29,7 @@ import { proxyImageUrl } from '../../utils/media'
 import {
   derivePersistedVariantSelection,
   shouldAllowFallbackVariantSelection,
+  shouldAllowVariantSelectionWithoutPriceMap,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
 import { parseRepairJson, repairMojibakeDeep } from '../../utils/text'
@@ -318,7 +319,7 @@ export default function Cart({ active, guidePreview = null }) {
   const detailIsOptionAvailable = useCallback(
     (groupName, opt, groupIndex) => {
       const map = detailProduct?.variant_price_map
-      if (!map || !Object.keys(map).length) return shouldAllowFallbackVariantSelection(detailProduct)
+      if (!map || !Object.keys(map).length) return shouldAllowVariantSelectionWithoutPriceMap(detailProduct)
       const filtered = detailGetFilteredEntries(groupIndex)
       return filtered.some(([k]) => {
         try { return JSON.parse(k).some(([g, o]) => g === groupName && o === opt) }

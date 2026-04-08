@@ -16,7 +16,7 @@ function getSavedSelectionParts(product) {
     .filter(Boolean)
 }
 
-export function shouldAllowFallbackVariantSelection(product) {
+export function shouldAllowVariantSelectionWithoutPriceMap(product) {
   if (!product) {
     return false
   }
@@ -36,6 +36,18 @@ export function shouldAllowFallbackVariantSelection(product) {
   }
 
   return true
+}
+
+export function shouldAllowFallbackVariantSelection(product) {
+  if (!shouldAllowVariantSelectionWithoutPriceMap(product)) {
+    return false
+  }
+
+  const hasExactBasePrice = typeof product?.price_cny === 'number'
+    && Number.isFinite(product.price_cny)
+    && !product.price_is_starting
+
+  return !hasExactBasePrice
 }
 
 export function derivePersistedVariantSelection(product) {

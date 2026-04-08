@@ -48,6 +48,7 @@ import { getDeliverySettings } from '../../utils/deliveryPricing'
 import {
   derivePersistedVariantSelection,
   shouldAllowFallbackVariantSelection,
+  shouldAllowVariantSelectionWithoutPriceMap,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
 import { repairMojibakeDeep } from '../../utils/text'
@@ -226,7 +227,7 @@ function formatProductCnyLabel(product) {
 }
 
 function shouldKeepFallbackVariantsSelectable(product) {
-  return shouldAllowFallbackVariantSelection(product)
+  return shouldAllowVariantSelectionWithoutPriceMap(product)
 }
 
 

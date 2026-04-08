@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { shouldAllowFallbackVariantSelection } from './productVariants.js'
+import {
+  shouldAllowFallbackVariantSelection,
+  shouldAllowVariantSelectionWithoutPriceMap,
+} from './productVariants.js'
 
 const variantGroups = [
   { name: 'Color', options: ['Yellow', 'Apricot'] },
@@ -14,6 +17,19 @@ test('poizon starting-price products keep variant chips selectable without varia
       platform: 'poizon',
       price_cny: 42.49,
       price_is_starting: true,
+      variants: variantGroups,
+      variant_price_map: {},
+    }),
+    true,
+  )
+})
+
+test('poizon exact-price products still keep variant chips selectable without price map', () => {
+  assert.equal(
+    shouldAllowVariantSelectionWithoutPriceMap({
+      platform: 'poizon',
+      price_cny: 888,
+      price_is_starting: false,
       variants: variantGroups,
       variant_price_map: {},
     }),
