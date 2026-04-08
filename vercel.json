@@ -59,6 +59,10 @@
       "destination": "/"
     },
     {
+      "source": "/uploads/:path*",
+      "destination": "https://api.x-poizon.ru/uploads/:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://api.x-poizon.ru/api/:path*"
     }
