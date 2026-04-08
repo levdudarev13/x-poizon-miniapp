@@ -23,7 +23,7 @@
 }
 
 .poizon-manual-choice--right {
-  margin-top: -3px;
+  margin-top: -2px;
 }
 
 .poizon-manual-choice__preview {
@@ -99,7 +99,7 @@
 .cp-variants__manual-hint,
 .cart-detail__manual-choice-hint {
   max-width: 34ch;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
   color: var(--text-muted);
 }
