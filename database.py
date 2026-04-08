@@ -4,11 +4,18 @@ import json
 import random
 import string
 import aiosqlite
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import time
-from config import HISTORY_MAX_ITEMS, SHARE_CODE_LENGTH, DEFAULT_MARGIN_STEPS, DEFAULT_MARGIN_MIN_RUB
+from config import (
+    ADMIN_USER_IDS,
+    DEFAULT_MARGIN_MIN_RUB,
+    DEFAULT_MARGIN_STEPS,
+    HISTORY_MAX_ITEMS,
+    SHARE_CODE_LENGTH,
+)
 from services.delivery_pricing import (
     DEFAULT_DELIVERY_PRICE_SETTINGS,
     DEFAULT_DELIVERY_TIMING_SETTINGS,
@@ -483,6 +490,21 @@ DEFAULT_ABOUT_DETAILS_SLIDES = (
 )
 
 DB_PATH = "buyer_bot.db"
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
+MINIAPP_ACTIVE_LOOKBACK_DAYS = 7
+ADMIN_BROADCAST_SEGMENT_LABELS = {
+    "all_users": "Все пользователи",
+    "active_miniapp_7d": "Активные miniapp за 7 дней",
+    "cart_holders": "Есть товары в корзине",
+    "request_builders": "Собирают заявку",
+    "ordered_customers": "Оформили/оплатили заказ",
+}
+ADMIN_SEGMENT_FALLBACK_LABELS = {
+    "ordered_customers": "Оформили/оплатили заказ",
+    "request_builders": "Собирают заявку",
+    "cart_holders": "Держат товары только в корзине",
+    "other_users": "Остальные пользователи",
+}
 DELIVERY_PROFILE_FIELDS = (
     "recipient_name",
     "phone",
@@ -492,6 +514,54 @@ DELIVERY_PROFILE_FIELDS = (
     "apartment",
     "comment",
 )
+
+
+def _now_in_moscow(now: datetime | None = None) -> datetime:
+    if now is None:
+        return datetime.now(MOSCOW_TZ)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=MOSCOW_TZ)
+    return now.astimezone(MOSCOW_TZ)
+
+
+def _to_sqlite_utc(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _moscow_day_bounds_utc(now: datetime | None = None) -> tuple[str, str]:
+    current = _now_in_moscow(now)
+    start_local = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local + timedelta(days=1)
+    return _to_sqlite_utc(start_local), _to_sqlite_utc(end_local)
+
+
+def _moscow_day_key(now: datetime | None = None) -> str:
+    return _now_in_moscow(now).strftime("%Y-%m-%d")
+
+
+def _moscow_recent_start_key(now: datetime | None = None, *, days: int = MINIAPP_ACTIVE_LOOKBACK_DAYS) -> str:
+    safe_days = max(1, int(days or 1))
+    current = _now_in_moscow(now)
+    return (current - timedelta(days=safe_days - 1)).strftime("%Y-%m-%d")
+
+
+def _admin_filter_clause(*, prefix: str = "AND", column: str = "user_id") -> tuple[str, list[int]]:
+    admin_ids = [int(user_id) for user_id in ADMIN_USER_IDS if int(user_id or 0) > 0]
+    if not admin_ids:
+        return "", []
+    placeholders = ",".join("?" for _ in admin_ids)
+    return f" {prefix} {column} NOT IN ({placeholders})", admin_ids
+
+
+def _timestamp_in_window(value: object, start_utc: str, end_utc: str) -> bool:
+    timestamp = str(value or "").strip()
+    if not timestamp:
+        return False
+    return start_utc <= timestamp < end_utc
+
+
+def _sum_total_with_margin(rows: list[aiosqlite.Row]) -> float:
+    return float(sum(float(row["total_with_margin_rub"] or 0) for row in rows))
 
 
 def _normalize_delivery_profile_payload(delivery_payload: dict | None) -> dict:
@@ -842,6 +912,15 @@ async def init_db():
                 msg_type TEXT    NOT NULL DEFAULT 'contact',
                 text     TEXT    NOT NULL,
                 sent_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS miniapp_activity_daily (
+                user_id       INTEGER NOT NULL,
+                activity_date TEXT    NOT NULL,
+                first_seen_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                last_seen_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+                request_count INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (user_id, activity_date)
             );
         """)
         await db.executemany(
@@ -2261,3 +2340,251 @@ async def msg_delete_all():
     async with _connect() as db:
         await db.execute("DELETE FROM user_messages")
         await db.commit()
+
+
+async def record_miniapp_activity(user_id: int, *, occurred_at: datetime | None = None) -> None:
+    safe_user_id = int(user_id or 0)
+    if safe_user_id <= 0:
+        return
+
+    now_local = _now_in_moscow(occurred_at)
+    activity_date = now_local.strftime("%Y-%m-%d")
+    occurred_at_utc = _to_sqlite_utc(now_local)
+    default_steps = json.dumps(DEFAULT_MARGIN_STEPS)
+
+    async with _connect() as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO users (user_id, username, margin_steps, margin_min_rub) VALUES (?,?,?,?)",
+            (safe_user_id, "", default_steps, DEFAULT_MARGIN_MIN_RUB),
+        )
+        await db.execute(
+            """
+            INSERT INTO miniapp_activity_daily (user_id, activity_date, first_seen_at, last_seen_at, request_count)
+            VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT(user_id, activity_date) DO UPDATE SET
+                last_seen_at=excluded.last_seen_at,
+                request_count=miniapp_activity_daily.request_count + 1
+            """,
+            (safe_user_id, activity_date, occurred_at_utc, occurred_at_utc),
+        )
+        await db.commit()
+
+
+async def _collect_admin_user_signals(now: datetime | None = None) -> dict:
+    now_local = _now_in_moscow(now)
+    today_key = _moscow_day_key(now_local)
+    recent_start_key = _moscow_recent_start_key(now_local)
+    day_start_utc, day_end_utc = _moscow_day_bounds_utc(now_local)
+
+    user_filter_sql, user_filter_params = _admin_filter_clause()
+    activity_filter_sql, activity_filter_params = _admin_filter_clause(column="user_id")
+    cart_filter_sql, cart_filter_params = _admin_filter_clause(column="ci.user_id")
+
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+
+        async with db.execute(
+            f"SELECT user_id FROM users WHERE 1=1{user_filter_sql}",
+            user_filter_params,
+        ) as cur:
+            all_user_rows = await cur.fetchall()
+
+        async with db.execute(
+            f"SELECT COUNT(*) AS total FROM users WHERE created_at >= ? AND created_at < ?{user_filter_sql}",
+            [day_start_utc, day_end_utc, *user_filter_params],
+        ) as cur:
+            new_users_today_row = await cur.fetchone()
+
+        async with db.execute(
+            f"SELECT DISTINCT user_id FROM miniapp_activity_daily WHERE activity_date = ?{activity_filter_sql}",
+            [today_key, *activity_filter_params],
+        ) as cur:
+            active_today_rows = await cur.fetchall()
+
+        async with db.execute(
+            (
+                "SELECT DISTINCT user_id FROM miniapp_activity_daily "
+                f"WHERE activity_date >= ? AND activity_date <= ?{activity_filter_sql}"
+            ),
+            [recent_start_key, today_key, *activity_filter_params],
+        ) as cur:
+            active_7d_rows = await cur.fetchall()
+
+        async with db.execute(
+            f"""
+            SELECT ci.user_id, ci.in_order, ci.order_submitted, ci.added_at, c.total_with_margin_rub
+            FROM cart_items ci
+            JOIN calculations c ON c.id = ci.calculation_id
+            WHERE ci.id = (
+                SELECT ci2.id
+                FROM cart_items ci2
+                JOIN calculations c2 ON c2.id = ci2.calculation_id
+                WHERE ci2.user_id = ci.user_id
+                  AND COALESCE(c2.product_url, '') = COALESCE(c.product_url, '')
+                ORDER BY ci2.added_at DESC
+                LIMIT 1
+            ){cart_filter_sql}
+            """,
+            cart_filter_params,
+        ) as cur:
+            current_cart_rows = await cur.fetchall()
+
+        async with db.execute(
+            f"""
+            SELECT ci.user_id, ci.paid, ci.submitted_at, c.total_with_margin_rub
+            FROM cart_items ci
+            JOIN calculations c ON c.id = ci.calculation_id
+            WHERE ci.order_submitted = 1{cart_filter_sql}
+            """,
+            cart_filter_params,
+        ) as cur:
+            submitted_order_rows = await cur.fetchall()
+
+    all_user_ids = {
+        int(row["user_id"] or 0)
+        for row in all_user_rows
+        if int(row["user_id"] or 0) > 0
+    }
+    active_today_ids = {
+        int(row["user_id"] or 0)
+        for row in active_today_rows
+        if int(row["user_id"] or 0) > 0
+    } & all_user_ids
+    active_7d_ids = {
+        int(row["user_id"] or 0)
+        for row in active_7d_rows
+        if int(row["user_id"] or 0) > 0
+    } & all_user_ids
+
+    cart_only_rows = [
+        row
+        for row in current_cart_rows
+        if not bool(row["order_submitted"]) and not bool(row["in_order"])
+    ]
+    request_builder_rows = [
+        row
+        for row in current_cart_rows
+        if not bool(row["order_submitted"]) and bool(row["in_order"])
+    ]
+    order_new_today_rows = [
+        row
+        for row in submitted_order_rows
+        if _timestamp_in_window(row["submitted_at"], day_start_utc, day_end_utc)
+    ]
+    cart_new_today_rows = [
+        row
+        for row in cart_only_rows
+        if _timestamp_in_window(row["added_at"], day_start_utc, day_end_utc)
+    ]
+
+    cart_holder_ids = {
+        int(row["user_id"] or 0)
+        for row in cart_only_rows
+        if int(row["user_id"] or 0) > 0
+    }
+    request_builder_ids = {
+        int(row["user_id"] or 0)
+        for row in request_builder_rows
+        if int(row["user_id"] or 0) > 0
+    }
+    order_submitter_ids = {
+        int(row["user_id"] or 0)
+        for row in submitted_order_rows
+        if int(row["user_id"] or 0) > 0
+    }
+    ordered_customer_ids = set(order_submitter_ids)
+    request_segment_ids = request_builder_ids - ordered_customer_ids
+    cart_segment_ids = cart_holder_ids - ordered_customer_ids - request_segment_ids
+    other_user_ids = all_user_ids - ordered_customer_ids - request_segment_ids - cart_segment_ids
+
+    return {
+        "now_local": now_local,
+        "today_label": now_local.strftime("%d.%m.%Y"),
+        "all_user_ids": all_user_ids,
+        "active_today_ids": active_today_ids,
+        "active_7d_ids": active_7d_ids,
+        "new_users_today": int((new_users_today_row or [0])[0] or 0),
+        "cart_only_rows": cart_only_rows,
+        "cart_new_today_rows": cart_new_today_rows,
+        "submitted_order_rows": submitted_order_rows,
+        "order_new_today_rows": order_new_today_rows,
+        "broadcast_segments": {
+            "all_users": set(all_user_ids),
+            "active_miniapp_7d": set(active_7d_ids),
+            "cart_holders": set(cart_holder_ids),
+            "request_builders": set(request_builder_ids),
+            "ordered_customers": set(order_submitter_ids),
+        },
+        "funnel_segments": {
+            "ordered_customers": ordered_customer_ids,
+            "request_builders": request_segment_ids,
+            "cart_holders": cart_segment_ids,
+            "other_users": other_user_ids,
+        },
+    }
+
+
+async def get_admin_stats(now: datetime | None = None) -> dict:
+    signals = await _collect_admin_user_signals(now)
+    total_users = len(signals["all_user_ids"])
+
+    def _segment_payload(key: str, users: set[int]) -> dict:
+        count = len(users)
+        percent = round((count / total_users) * 100, 1) if total_users else 0.0
+        return {
+            "key": key,
+            "label": ADMIN_SEGMENT_FALLBACK_LABELS[key],
+            "count": count,
+            "percent": percent,
+        }
+
+    return {
+        "timezone_label": "МСК",
+        "today_label": signals["today_label"],
+        "activity_lookback_days": MINIAPP_ACTIVE_LOOKBACK_DAYS,
+        "users": {
+            "total": total_users,
+            "active_today": len(signals["active_today_ids"]),
+            "new_today": int(signals["new_users_today"]),
+        },
+        "cart": {
+            "items_total": len(signals["cart_only_rows"]),
+            "amount_total_rub": _sum_total_with_margin(signals["cart_only_rows"]),
+            "items_new_today": len(signals["cart_new_today_rows"]),
+            "amount_new_today_rub": _sum_total_with_margin(signals["cart_new_today_rows"]),
+        },
+        "orders": {
+            "items_total": len(signals["submitted_order_rows"]),
+            "amount_total_rub": _sum_total_with_margin(signals["submitted_order_rows"]),
+            "items_new_today": len(signals["order_new_today_rows"]),
+            "amount_new_today_rub": _sum_total_with_margin(signals["order_new_today_rows"]),
+        },
+        "segments": [
+            _segment_payload("ordered_customers", signals["funnel_segments"]["ordered_customers"]),
+            _segment_payload("request_builders", signals["funnel_segments"]["request_builders"]),
+            _segment_payload("cart_holders", signals["funnel_segments"]["cart_holders"]),
+            _segment_payload("other_users", signals["funnel_segments"]["other_users"]),
+        ],
+        "broadcast_segments": {
+            key: len(user_ids)
+            for key, user_ids in signals["broadcast_segments"].items()
+        },
+    }
+
+
+async def get_admin_broadcast_segment_counts(now: datetime | None = None) -> dict[str, int]:
+    signals = await _collect_admin_user_signals(now)
+    return {
+        key: len(user_ids)
+        for key, user_ids in signals["broadcast_segments"].items()
+    }
+
+
+async def get_admin_broadcast_recipient_ids(segment_key: str, now: datetime | None = None) -> list[int]:
+    normalized_key = str(segment_key or "").strip()
+    if normalized_key not in ADMIN_BROADCAST_SEGMENT_LABELS:
+        raise ValueError("unknown_broadcast_segment")
+
+    signals = await _collect_admin_user_signals(now)
+    recipients = signals["broadcast_segments"].get(normalized_key, set())
+    return sorted(int(user_id) for user_id in recipients if int(user_id or 0) > 0)

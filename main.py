@@ -72,8 +72,9 @@ def main():
     from handlers.cart import build_cart_handlers
     from handlers.history import build_history_handlers
     from handlers.settings import build_settings_handlers
-    from handlers.admin_orders import build_admin_orders_handlers, build_admin_carts_handlers, handle_admin_notify_text
-    from handlers.messages import build_messages_conv_handler, build_messages_handlers
+    from handlers.admin_orders import build_admin_orders_handlers, build_admin_carts_handlers
+    from handlers.messages import build_messages_conv_handler, build_messages_handlers, handle_admin_text_router
+    from handlers.admin_dashboard import build_admin_dashboard_handlers, handle_admin_attachment_router
     from handlers.mode import build_mode_handlers
     from config import ADMIN_USER_IDS as _ADMIN_IDS
 
@@ -87,7 +88,14 @@ def main():
         app.add_handler(
             MessageHandler(
                 filters.TEXT & ~filters.COMMAND & filters.User(user_id=list(_ADMIN_IDS)),
-                handle_admin_notify_text,
+                handle_admin_text_router,
+            ),
+            group=0,
+        )
+        app.add_handler(
+            MessageHandler(
+                filters.ALL & ~filters.TEXT & ~filters.COMMAND & filters.User(user_id=list(_ADMIN_IDS)),
+                handle_admin_attachment_router,
             ),
             group=0,
         )
@@ -113,6 +121,8 @@ def main():
     # Поток сообщений пользователей (group=5) + независимые callback-хендлеры (group=1)
     app.add_handler(build_messages_conv_handler(), group=5)
     for h in build_messages_handlers():
+        app.add_handler(h, group=1)
+    for h in build_admin_dashboard_handlers():
         app.add_handler(h, group=1)
 
     # Переключение режима (group=1)

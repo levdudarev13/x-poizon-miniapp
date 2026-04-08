@@ -89,6 +89,23 @@ _PROMO_BANNER_UPLOAD_RE = re.compile(
 _ABOUT_DETAILS_IMAGE_FORMAT = "2:3"
 
 
+def _resolve_static_file_path(request_path: str) -> Path:
+    normalized_path = str(request_path or "/").split("?", 1)[0]
+    if normalized_path == "/" or normalized_path.startswith("/launch/"):
+        return MINIAPP_DIR / "index.html"
+
+    relative_path = normalized_path.lstrip("/")
+    candidate = MINIAPP_DIR / relative_path
+    if candidate.exists() and candidate.is_file():
+        return candidate
+
+    # Keep asset 404s intact, but allow extensionless SPA routes to render the app shell.
+    if "." not in Path(relative_path).name:
+        return MINIAPP_DIR / "index.html"
+
+    return candidate
+
+
 @contextmanager
 def _track_active_request():
     """Mark long-running work so the tunnel watchdog does not recycle mid-request."""
@@ -817,6 +834,19 @@ def _admin_contact_user_id() -> int:
     return _admin_contact_target_user_id()
 
 
+async def _track_miniapp_activity(user_id: int | None) -> None:
+    safe_user_id = int(user_id or 0)
+    if safe_user_id <= 0:
+        return
+    try:
+        await db.record_miniapp_activity(safe_user_id)
+    except Exception as exc:
+        if "no such table: miniapp_activity_daily" in str(exc):
+            log.debug("Miniapp activity table is not available yet for user_id=%s", safe_user_id)
+            return
+        log.warning("Failed to record miniapp activity for user_id=%s", safe_user_id, exc_info=True)
+
+
 async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -> dict:
     rate = await er.get_rate()
     admin = await db.get_admin_settings()
@@ -829,6 +859,7 @@ async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -
     promo_banners_payload = await _promo_banners_payload()
     user_settings = None
     if user_id:
+        await _track_miniapp_activity(user_id)
         user = await db.get_or_create_user(user_id)
         user_settings = {
             "margin_steps": json.loads(user.get("margin_steps", "[]") or "[]"),
@@ -898,6 +929,7 @@ def _delivery_missing_required(delivery_payload: dict | None) -> list[str]:
 
 
 async def _delivery_profile_payload(user_id: int) -> dict:
+    await _track_miniapp_activity(user_id)
     delivery_record = await db.get_delivery_profile(user_id)
     delivery_data = _normalize_delivery_payload(delivery_record)
     missing_required = _delivery_missing_required(delivery_data)
@@ -913,6 +945,7 @@ async def _save_delivery_profile_payload(payload: dict) -> dict:
     if user_id <= 0:
         raise RuntimeError("user_id is required")
 
+    await _track_miniapp_activity(user_id)
     delivery_data = _normalize_delivery_payload(payload.get("delivery_data"))
     saved_delivery = await db.save_delivery_profile(user_id, delivery_data)
     saved_payload = _normalize_delivery_payload(saved_delivery)
@@ -2479,6 +2512,7 @@ async def _calculate_payload(payload: dict) -> dict:
     user_id = int(payload.get("user_id") or 0)
     calc_id = payload.get("calc_id")
     if user_id:
+        await _track_miniapp_activity(user_id)
         try:
             if calc_id:
                 await db.update_calculation(int(calc_id), user_id, result)
@@ -2498,6 +2532,7 @@ async def _save_calculation_payload(payload: dict) -> dict:
     if not user_id:
         raise RuntimeError("user_id is required")
 
+    await _track_miniapp_activity(user_id)
     result = await _build_calculation_result(payload)
     admin = await db.get_admin_settings()
     effective_rate = await get_effective_rate()
@@ -2511,6 +2546,7 @@ async def _save_calculation_payload(payload: dict) -> dict:
 
 
 async def _history_payload(user_id: int) -> list[dict]:
+    await _track_miniapp_activity(user_id)
     rows = await db.get_history(user_id, limit=20)
     # Enrich rows with image_url parsed from calc_json
     for row in rows:
@@ -2542,6 +2578,7 @@ async def _history_payload(user_id: int) -> list[dict]:
 
 
 async def _cart_payload(user_id: int) -> list[dict]:
+    await _track_miniapp_activity(user_id)
     rows = await db.cart_get_items(user_id)
     admin = await db.get_admin_settings()
     effective_rate = await get_effective_rate()
@@ -2590,6 +2627,7 @@ async def _add_to_cart_payload(payload: dict) -> dict:
     calc_id = int(payload.get("calc_id") or 0)
     if user_id <= 0 or calc_id <= 0:
         raise RuntimeError("user_id and calc_id are required")
+    await _track_miniapp_activity(user_id)
     log.info("cart_add: user=%s calc=%s", user_id, calc_id)
     await db.cart_add(user_id, calc_id)
     return {"ok": True}
@@ -2600,6 +2638,7 @@ async def _save_and_add_to_cart(payload: dict) -> dict:
     user_id = int(payload.get("user_id") or 0)
     if not user_id:
         raise RuntimeError("user_id is required")
+    await _track_miniapp_activity(user_id)
     result = await _build_calculation_result(payload)
     admin = await db.get_admin_settings()
     effective_rate = await get_effective_rate()
@@ -2632,6 +2671,7 @@ async def _remove_from_cart_payload(payload: dict) -> dict:
     calc_id = int(payload.get("calc_id") or 0)
     if user_id <= 0 or calc_id <= 0:
         raise RuntimeError("user_id and calc_id are required")
+    await _track_miniapp_activity(user_id)
     await db.cart_remove(user_id, calc_id)
     return {"ok": True}
 
@@ -2640,6 +2680,7 @@ async def _clear_cart_payload(payload: dict) -> dict:
     user_id = int(payload.get("user_id") or 0)
     if user_id <= 0:
         raise RuntimeError("user_id is required")
+    await _track_miniapp_activity(user_id)
     await db.cart_clear(user_id)
     return {"ok": True}
 
@@ -2695,6 +2736,7 @@ async def _submit_order_payload(payload: dict) -> dict:
     user_id = int(payload.get("user_id") or 0)
     if user_id <= 0:
         raise RuntimeError("user_id is required")
+    await _track_miniapp_activity(user_id)
     delivery_record = await db.get_delivery_profile(user_id)
     delivery_data = _normalize_delivery_payload(delivery_record)
     missing_required = _delivery_missing_required(delivery_data)
@@ -2732,6 +2774,7 @@ async def _set_order_payload(payload: dict) -> dict:
     value = bool(payload.get("value", False))
     if user_id <= 0 or calc_id <= 0:
         raise RuntimeError("user_id and calc_id are required")
+    await _track_miniapp_activity(user_id)
     await db.cart_set_order(user_id, calc_id, value)
     return {"ok": True}
 
@@ -2741,6 +2784,7 @@ async def _cart_item_detail(payload: dict) -> dict:
     calc_id = int(payload.get("calc_id") or 0)
     if user_id <= 0 or calc_id <= 0:
         raise RuntimeError("user_id and calc_id are required")
+    await _track_miniapp_activity(user_id)
     row = await db.get_calculation_by_id(calc_id, user_id)
     if not row:
         raise RuntimeError("Item not found")
@@ -2824,6 +2868,7 @@ async def _cart_update_variant(payload: dict) -> dict:
     new_size = str(payload.get("size", ""))
     if user_id <= 0 or calc_id <= 0 or new_price_cny <= 0:
         raise RuntimeError("user_id, calc_id, price_cny are required")
+    await _track_miniapp_activity(user_id)
     row = await db.get_calculation_by_id(calc_id, user_id)
     if not row:
         raise RuntimeError("Item not found")
@@ -3242,7 +3287,7 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=500)
             return
 
-        file_path = MINIAPP_DIR / ("index.html" if parsed.path == "/" else parsed.path.lstrip("/"))
+        file_path = _resolve_static_file_path(parsed.path)
         self._send_file(file_path)
 
     def do_POST(self) -> None:
