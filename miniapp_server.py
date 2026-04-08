@@ -10,6 +10,7 @@ import httpx
 import json
 import logging
 import mimetypes
+import os
 import re
 import secrets
 import threading
@@ -87,6 +88,9 @@ _PROMO_BANNER_UPLOAD_RE = re.compile(
     re.IGNORECASE,
 )
 _ABOUT_DETAILS_IMAGE_FORMAT = "2:3"
+_PUBLIC_UPLOAD_BASE_URL = str(
+    os.getenv("MINI_APP_API_PUBLIC_URL", "").strip() or "https://api.x-poizon.ru"
+).rstrip("/")
 
 
 def _resolve_static_file_path(request_path: str) -> Path:
@@ -270,6 +274,15 @@ def _resolve_upload_path(request_path: str) -> Path | None:
     return candidate
 
 
+def _public_media_url(value: object) -> str:
+    normalized_url = str(value or "").strip()
+    if not normalized_url.startswith("/uploads/"):
+        return normalized_url
+    if not _PUBLIC_UPLOAD_BASE_URL:
+        return normalized_url
+    return f"{_PUBLIC_UPLOAD_BASE_URL}{normalized_url}"
+
+
 def _save_promo_banner_image(data_url: object, *, prefix: str = "banner") -> dict:
     data_url_text = str(data_url or "").strip()
     if not data_url_text:
@@ -306,8 +319,11 @@ def _save_promo_banner_image(data_url: object, *, prefix: str = "banner") -> dic
     output_path = PROMO_BANNER_UPLOADS_DIR / filename
     output_path.write_bytes(image_bytes)
 
+    relative_url = f"/uploads/promo-banners/{filename}"
+
     return {
-        "url": f"/uploads/promo-banners/{filename}",
+        "url": _public_media_url(relative_url),
+        "path": relative_url,
         "mime_type": mime_type,
         "byte_size": len(image_bytes),
     }
@@ -1039,7 +1055,7 @@ def _serialize_promo_banner_block(block: dict | None) -> dict:
         return payload
 
     if block_type == "image":
-        payload["image_url"] = str(banner_block.get("image_url") or "").strip()
+        payload["image_url"] = _public_media_url(banner_block.get("image_url"))
         payload["alt_text"] = str(banner_block.get("alt_text") or "").strip()
         payload["caption"] = str(banner_block.get("caption") or "").strip()
         return payload
@@ -1070,9 +1086,9 @@ def _serialize_promo_banner_item(item: dict | None) -> dict:
         "button_label": str(banner_item.get("button_label") or "").strip(),
         "button_url": str(banner_item.get("button_url") or "").strip(),
         "button_color": str(banner_item.get("button_color") or "").strip(),
-        "image_url": str(banner_item.get("image_url") or "").strip(),
+        "image_url": _public_media_url(banner_item.get("image_url")),
         "image_alt": str(banner_item.get("image_alt") or "").strip(),
-        "story_image_url": str(banner_item.get("story_image_url") or "").strip(),
+        "story_image_url": _public_media_url(banner_item.get("story_image_url")),
         "story_image_alt": str(banner_item.get("story_image_alt") or "").strip(),
         "blocks": blocks,
         "position": int(banner_item.get("position") or 0),
@@ -1100,7 +1116,7 @@ def _serialize_about_slide_item(item: dict | None) -> dict:
 
     return {
         "slot": slot,
-        "image_url": str(slide_item.get("image_url") or "").strip(),
+        "image_url": _public_media_url(slide_item.get("image_url")),
         "image_alt": image_alt,
         "updated_at": updated_at,
         "updated_at_label": _format_admin_timestamp(updated_at),

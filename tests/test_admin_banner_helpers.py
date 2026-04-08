@@ -67,7 +67,10 @@ class AdminBannerHelpersTests(unittest.TestCase):
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["entry_banner_id"], 1)
         self.assertTrue(payload["items"][0]["show_on_entry"])
-        self.assertEqual(payload["items"][0]["story_image_url"], "/uploads/promo-banners/story-1.webp")
+        self.assertEqual(
+            payload["items"][0]["story_image_url"],
+            "https://api.x-poizon.ru/uploads/promo-banners/story-1.webp",
+        )
         self.assertEqual(payload["items"][0]["blocks"][1]["type"], "button")
         self.assertEqual(payload["items"][0]["blocks"][1]["button_url"], "https://vk.ru/logisticsx")
 
@@ -119,7 +122,10 @@ class AdminBannerHelpersTests(unittest.TestCase):
         self.assertEqual(payload["stats"]["auto_open_count"], 1)
         self.assertEqual(payload["stats"]["latest_updated_at"], 200.0)
         self.assertEqual(payload["upload"]["format"], "WEBP")
-        self.assertEqual(payload["items"][0]["story_image_url"], "/uploads/promo-banners/story-one.webp")
+        self.assertEqual(
+            payload["items"][0]["story_image_url"],
+            "https://api.x-poizon.ru/uploads/promo-banners/story-one.webp",
+        )
 
     def test_admin_banner_save_payload_passes_expected_fields(self) -> None:
         saved_banner = {
@@ -186,6 +192,55 @@ class AdminBannerHelpersTests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["id"], 3)
         self.assertEqual(payload["items"][0]["button_color"], "solar-orange")
         self.assertEqual(payload["items"][0]["story_image_url"], "")
+
+    def test_public_banner_payload_expands_uploaded_image_urls(self) -> None:
+        banner_rows = [
+            {
+                "id": 8,
+                "label": "Launch",
+                "title": "Uploaded banner",
+                "subtitle": "",
+                "button_label": "",
+                "button_url": "",
+                "button_color": "acid-lime",
+                "image_url": "/uploads/promo-banners/cover.webp",
+                "image_alt": "Uploaded banner",
+                "story_image_url": "/uploads/promo-banners/story.webp",
+                "story_image_alt": "Uploaded story",
+                "blocks": [
+                    {
+                        "id": "image-1",
+                        "type": "image",
+                        "image_url": "/uploads/promo-banners/inline.webp",
+                        "alt_text": "Inline",
+                        "caption": "",
+                    }
+                ],
+                "position": 1,
+                "show_on_entry": 1,
+                "updated_at": 500.0,
+            }
+        ]
+
+        with patch(
+            "miniapp_server.db.get_admin_banners",
+            new=AsyncMock(return_value=banner_rows),
+        ):
+            payload = asyncio.run(_promo_banners_payload())
+
+        banner = payload["items"][0]
+        self.assertEqual(
+            banner["image_url"],
+            "https://api.x-poizon.ru/uploads/promo-banners/cover.webp",
+        )
+        self.assertEqual(
+            banner["story_image_url"],
+            "https://api.x-poizon.ru/uploads/promo-banners/story.webp",
+        )
+        self.assertEqual(
+            banner["blocks"][0]["image_url"],
+            "https://api.x-poizon.ru/uploads/promo-banners/inline.webp",
+        )
 
     def test_admin_banner_delete_payload_removes_entry(self) -> None:
         delete_mock = AsyncMock()
