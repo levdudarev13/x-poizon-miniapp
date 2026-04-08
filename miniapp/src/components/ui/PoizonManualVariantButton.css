@@ -38,7 +38,7 @@
 .poizon-manual-choice__frames {
   position: absolute;
   top: 4px;
-  right: 0;
+  right: 4px;
   left: auto;
   width: 68px;
   height: 68px;
