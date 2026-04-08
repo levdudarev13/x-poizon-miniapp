@@ -98,7 +98,7 @@ class AdminCartsHelpersTests(unittest.TestCase):
         with patch(
             "miniapp_server.db.cart_get_all_carts",
             new=AsyncMock(return_value=rows),
-        ):
+        ), patch("miniapp_server.BOT_TOKEN", ""):
             payload = asyncio.run(_admin_carts_payload())
 
         required_stats_keys = {
@@ -160,7 +160,7 @@ class AdminCartsHelpersTests(unittest.TestCase):
         with patch(
             "miniapp_server.db.cart_get_all_carts",
             new=AsyncMock(return_value=[]),
-        ):
+        ), patch("miniapp_server.BOT_TOKEN", ""):
             payload = asyncio.run(_admin_carts_payload())
 
         self.assertEqual(payload["users"], [])
@@ -221,6 +221,66 @@ class AdminCartsHelpersTests(unittest.TestCase):
 
         self.assertEqual(len(fake_client.calls), 1)
         self.assertIn(888, _admin_avatar_cache)
+
+    def test_admin_carts_payload_hydrates_missing_identity_from_telegram(self) -> None:
+        rows = [
+            {
+                "user_id": 202,
+                "username": "",
+                "first_name": "",
+                "last_name": "",
+                "calc_id": 21,
+                "name": "Product C",
+                "short_name": "Client C",
+                "product_url": "",
+                "price_cny": 640,
+                "subtotal_rub": 8800,
+                "total_with_margin_rub": 9100,
+                "platform": "1688",
+                "calc_json": "",
+                "in_order": 0,
+            },
+        ]
+        fake_client = _FakeHttpxClient([
+            _FakeHttpxResponse(json_data={
+                "ok": True,
+                "result": {
+                    "id": 202,
+                    "type": "private",
+                    "username": "buyer202",
+                    "first_name": "Ivan",
+                    "last_name": "Petrov",
+                },
+            }),
+        ])
+        persist_identity = AsyncMock(return_value={
+            "user_id": 202,
+            "username": "buyer202",
+            "first_name": "Ivan",
+            "last_name": "Petrov",
+        })
+
+        with patch(
+            "miniapp_server.db.cart_get_all_carts",
+            new=AsyncMock(return_value=rows),
+        ), patch(
+            "miniapp_server.db.get_or_create_user",
+            new=persist_identity,
+        ), patch(
+            "miniapp_server.BOT_TOKEN",
+            "test-token",
+        ), patch(
+            "miniapp_server.httpx.AsyncClient",
+            return_value=fake_client,
+        ):
+            payload = asyncio.run(_admin_carts_payload())
+
+        user = payload["users"][0]
+        self.assertEqual(user["display_name"], "Ivan Petrov")
+        self.assertEqual(user["contact_label"], "@buyer202")
+        self.assertEqual(user["first_name"], "Ivan")
+        self.assertEqual(user["last_name"], "Petrov")
+        persist_identity.assert_awaited_once_with(202, "buyer202", "Ivan", "Petrov")
 
 
 if __name__ == "__main__":

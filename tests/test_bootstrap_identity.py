@@ -14,12 +14,24 @@ from miniapp_server import _bootstrap_payload, _resolve_bootstrap_identity
 TEST_BOT_TOKEN = "test-bot-token"
 
 
-def build_signed_init_data(user_id: int, bot_token: str = TEST_BOT_TOKEN) -> str:
+def build_signed_init_data(
+    user_id: int,
+    bot_token: str = TEST_BOT_TOKEN,
+    *,
+    username: str = "",
+    first_name: str = "Admin",
+    last_name: str = "",
+) -> str:
     payload = {
         "auth_date": "1710000000",
         "query_id": "AAEAAAE",
         "user": json.dumps(
-            {"id": user_id, "first_name": "Admin"},
+            {
+                "id": user_id,
+                "username": username,
+                "first_name": first_name,
+                "last_name": last_name,
+            },
             separators=(",", ":"),
             ensure_ascii=False,
         ),
@@ -92,6 +104,61 @@ class BootstrapIdentityTests(unittest.TestCase):
             payload = asyncio.run(_bootstrap_payload(321, is_admin_user=True))
 
         self.assertIs(payload["is_admin"], True)
+
+    def test_bootstrap_payload_persists_profile_from_signed_init_data(self) -> None:
+        rate = SimpleNamespace(
+            cny_rub=11.1,
+            usd_rub=12.2,
+            eur_rub=13.3,
+            updated_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+            age_seconds=5,
+            age_human="5s",
+        )
+        get_or_create_user = AsyncMock(
+            return_value={
+                "margin_steps": "[]",
+                "margin_min_rub": "500.0",
+                "username": "buyer404",
+                "first_name": "Ivan",
+                "last_name": "Petrov",
+            }
+        )
+
+        with patch(
+            "miniapp_server.er.get_rate",
+            new=AsyncMock(return_value=rate),
+        ), patch(
+            "miniapp_server.db.get_admin_settings",
+            new=AsyncMock(return_value={"commission_pct": "10.0"}),
+        ), patch(
+            "miniapp_server.db.get_or_create_user",
+            new=get_or_create_user,
+        ), patch(
+            "miniapp_server.get_user_profile_from_init_data",
+            return_value={
+                "id": 404,
+                "username": "buyer404",
+                "first_name": "Ivan",
+                "last_name": "Petrov",
+            },
+        ), patch(
+            "miniapp_server._showcase_payload",
+            new=AsyncMock(return_value={"items": [], "configured_count": 0}),
+        ):
+            asyncio.run(
+                _bootstrap_payload(
+                    404,
+                    is_admin_user=False,
+                    init_data_raw=build_signed_init_data(
+                        404,
+                        username="buyer404",
+                        first_name="Ivan",
+                        last_name="Petrov",
+                    ),
+                )
+            )
+
+        get_or_create_user.assert_awaited_once_with(404, "buyer404", "Ivan", "Petrov")
 
     def test_bootstrap_payload_includes_admin_contact_url(self) -> None:
         rate = SimpleNamespace(

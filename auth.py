@@ -45,10 +45,24 @@ def validate_init_data(init_data_raw: str, bot_token: str | None = None) -> dict
     return parsed
 
 
+def get_user(validated: dict) -> dict:
+    """Extract Telegram user payload from a previously validated initData payload."""
+    raw_user = validated.get("user", "{}")
+
+    try:
+        user = json.loads(raw_user)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid user payload") from exc
+
+    if not isinstance(user, dict):
+        raise ValueError("Invalid user payload")
+
+    return user
+
+
 def get_user_id(validated: dict) -> int:
     """Extract user_id from a previously validated initData payload."""
-    user_json = validated.get("user", "{}")
-    user = json.loads(user_json)
+    user = get_user(validated)
     return int(user.get("id", 0))
 
 
@@ -56,6 +70,18 @@ def get_user_id_from_init_data(init_data_raw: str, bot_token: str | None = None)
     """Shared route helper that turns raw initData into a trusted Telegram user_id."""
     validated = validate_init_data(init_data_raw, bot_token=bot_token)
     return get_user_id(validated)
+
+
+def get_user_profile_from_init_data(init_data_raw: str, bot_token: str | None = None) -> dict:
+    """Resolve trusted Telegram profile fields from raw signed initData."""
+    validated = validate_init_data(init_data_raw, bot_token=bot_token)
+    user = get_user(validated)
+    return {
+        "id": int(user.get("id", 0) or 0),
+        "username": str(user.get("username") or "").strip(),
+        "first_name": str(user.get("first_name") or "").strip(),
+        "last_name": str(user.get("last_name") or "").strip(),
+    }
 
 
 def is_admin(user_id: int) -> bool:

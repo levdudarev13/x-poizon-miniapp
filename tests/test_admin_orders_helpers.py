@@ -143,7 +143,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         with patch(
             "miniapp_server.db.cart_get_all_orders",
             new=AsyncMock(return_value=rows),
-        ):
+        ), patch("miniapp_server.BOT_TOKEN", ""):
             payload = asyncio.run(_admin_orders_payload())
 
         required_item_keys = {
@@ -261,7 +261,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         with patch(
             "miniapp_server.db.cart_get_all_orders",
             new=AsyncMock(return_value=rows),
-        ):
+        ), patch("miniapp_server.BOT_TOKEN", ""):
             payload = asyncio.run(_admin_orders_payload())
 
         item = payload["users"][0]["items"][0]
@@ -274,11 +274,52 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         )
         self.assertEqual(item["size_text"], "")
 
+    def test_admin_orders_payload_prefers_saved_full_name_for_user_cards(self) -> None:
+        rows = [
+            {
+                "user_id": 404,
+                "username": "",
+                "first_name": "Oleg",
+                "last_name": "Sidorov",
+                "calc_id": 31,
+                "paid": 0,
+                "shipped": 0,
+                "arrived": 0,
+                "tracking_number": "",
+                "item_number": "",
+                "order_submitted": 1,
+                "delivery_snapshot_json": "",
+                "submission_batch_id": "sub-404-001",
+                "submitted_at": "2026-03-22T11:00:00",
+                "order_added_at": "2026-03-22 11:00:00",
+                "name": "Product D",
+                "short_name": "",
+                "product_url": "https://example.com/d",
+                "price_cny": 700,
+                "subtotal_rub": 10000,
+                "total_with_margin_rub": 11100,
+                "platform": "poizon",
+                "size": "",
+                "calc_json": "",
+            },
+        ]
+
+        with patch(
+            "miniapp_server.db.cart_get_all_orders",
+            new=AsyncMock(return_value=rows),
+        ), patch("miniapp_server.BOT_TOKEN", ""):
+            payload = asyncio.run(_admin_orders_payload())
+
+        self.assertEqual(payload["users"][0]["display_name"], "Oleg Sidorov")
+        self.assertEqual(payload["users"][0]["contact_label"], "Oleg Sidorov")
+        self.assertEqual(payload["users"][0]["first_name"], "Oleg")
+        self.assertEqual(payload["users"][0]["last_name"], "Sidorov")
+
     def test_admin_orders_payload_handles_empty_state(self) -> None:
         with patch(
             "miniapp_server.db.cart_get_all_orders",
             new=AsyncMock(return_value=[]),
-        ):
+        ), patch("miniapp_server.BOT_TOKEN", ""):
             payload = asyncio.run(_admin_orders_payload())
 
         self.assertEqual(payload["users"], [])
@@ -379,7 +420,7 @@ class AdminOrdersHelpersTests(unittest.TestCase):
         with patch(
             "miniapp_server.db.cart_get_all_orders",
             new=AsyncMock(return_value=rows),
-        ):
+        ), patch("miniapp_server.BOT_TOKEN", ""):
             payload = asyncio.run(_admin_orders_payload())
 
         user = payload["users"][0]

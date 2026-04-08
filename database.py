@@ -806,6 +806,8 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS users (
                 user_id   INTEGER PRIMARY KEY,
                 username  TEXT,
+                first_name TEXT NOT NULL DEFAULT '',
+                last_name TEXT NOT NULL DEFAULT '',
                 margin_steps TEXT NOT NULL DEFAULT '[]',
                 margin_min_rub REAL NOT NULL DEFAULT 500.0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -959,6 +961,8 @@ async def init_db():
 
         # Миграция: добавить бан-колонки в users
         for col, col_type in [
+            ("first_name",          "TEXT    NOT NULL DEFAULT ''"),
+            ("last_name",           "TEXT    NOT NULL DEFAULT ''"),
             ("ban_level",           "INTEGER DEFAULT 0"),
             ("ban_until",           "REAL    DEFAULT 0"),
             ("ban_last_notified",   "REAL    DEFAULT 0"),
@@ -1036,22 +1040,66 @@ async def init_db():
 
 # ─── Пользователи ─────────────────────────────────────────────────────────────
 
-async def get_or_create_user(user_id: int, username: str = "") -> dict:
+def _normalize_user_identity_part(value) -> str:
+    return str(value or "").strip()
+
+
+async def get_or_create_user(
+    user_id: int,
+    username: str = "",
+    first_name: str = "",
+    last_name: str = "",
+) -> dict:
+    normalized_username = _normalize_user_identity_part(username).lstrip("@")
+    normalized_first_name = _normalize_user_identity_part(first_name)
+    normalized_last_name = _normalize_user_identity_part(last_name)
+
     async with _connect() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cur:
             row = await cur.fetchone()
         if row:
-            return dict(row)
+            user = dict(row)
+            next_username = normalized_username or str(user.get("username") or "").strip()
+            next_first_name = normalized_first_name or str(user.get("first_name") or "").strip()
+            next_last_name = normalized_last_name or str(user.get("last_name") or "").strip()
+
+            if (
+                next_username != str(user.get("username") or "").strip()
+                or next_first_name != str(user.get("first_name") or "").strip()
+                or next_last_name != str(user.get("last_name") or "").strip()
+            ):
+                await db.execute(
+                    "UPDATE users SET username=?, first_name=?, last_name=? WHERE user_id=?",
+                    (next_username, next_first_name, next_last_name, user_id),
+                )
+                await db.commit()
+                user["username"] = next_username
+                user["first_name"] = next_first_name
+                user["last_name"] = next_last_name
+
+            return user
         default_steps = json.dumps(DEFAULT_MARGIN_STEPS)
         await db.execute(
-            "INSERT INTO users (user_id, username, margin_steps, margin_min_rub) VALUES (?,?,?,?)",
-            (user_id, username, default_steps, DEFAULT_MARGIN_MIN_RUB),
+            """
+            INSERT INTO users (user_id, username, first_name, last_name, margin_steps, margin_min_rub)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (
+                user_id,
+                normalized_username,
+                normalized_first_name,
+                normalized_last_name,
+                default_steps,
+                DEFAULT_MARGIN_MIN_RUB,
+            ),
         )
         await db.commit()
         return {
             "user_id": user_id,
-            "username": username,
+            "username": normalized_username,
+            "first_name": normalized_first_name,
+            "last_name": normalized_last_name,
             "margin_steps": default_steps,
             "margin_min_rub": DEFAULT_MARGIN_MIN_RUB,
         }
@@ -1380,7 +1428,7 @@ async def cart_get_all_orders() -> list[dict]:
                       ci.submission_batch_id, ci.submitted_at,
                       c.name, c.product_url, c.price_cny, c.subtotal_rub,
                       c.total_with_margin_rub, c.platform, c.short_name, c.size, c.calc_json,
-                      u.username
+                      u.username, u.first_name, u.last_name
                FROM cart_items ci
                JOIN calculations c ON c.id = ci.calculation_id
                JOIN users u ON u.user_id = ci.user_id
@@ -1467,7 +1515,7 @@ async def cart_get_all_carts() -> list[dict]:
                       ci.in_order, ci.added_at,
                       c.name, c.product_url, c.price_cny, c.subtotal_rub, c.total_with_margin_rub,
                       c.platform, c.short_name, c.calc_json,
-                      u.username
+                      u.username, u.first_name, u.last_name
                FROM cart_items ci
                JOIN calculations c ON c.id = ci.calculation_id
                JOIN users u ON u.user_id = ci.user_id

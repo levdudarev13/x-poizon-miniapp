@@ -261,7 +261,12 @@ async def send_buyer_reply_keyboard(bot, chat_id: int, user_id: int, ctx) -> Non
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    await db.get_or_create_user(user.id, user.username or "")
+    await db.get_or_create_user(
+        user.id,
+        user.username or "",
+        user.first_name or "",
+        user.last_name or "",
+    )
 
     args = ctx.args
     if args and args[0].startswith("share_"):
@@ -350,7 +355,12 @@ async def handle_buyer_rate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def handle_unexpected_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Любое сообщение вне диалога — показываем стартовое меню."""
     user = update.effective_user
-    await db.get_or_create_user(user.id, user.username or "")
+    await db.get_or_create_user(
+        user.id,
+        user.username or "",
+        user.first_name or "",
+        user.last_name or "",
+    )
     ban = await db.get_ban_info(user.id)
 
     import time as _t

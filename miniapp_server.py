@@ -27,7 +27,7 @@ active_requests = 0
 active_requests_lock = threading.Lock()
 
 import database as db
-from auth import get_user_id_from_init_data, is_admin
+from auth import get_user_id_from_init_data, get_user_profile_from_init_data, is_admin
 from config import (
     ADMIN_CONTACT_USER_ID,
     ADMIN_CONTACT_USERNAME,
@@ -863,7 +863,11 @@ async def _track_miniapp_activity(user_id: int | None) -> None:
         log.warning("Failed to record miniapp activity for user_id=%s", safe_user_id, exc_info=True)
 
 
-async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -> dict:
+async def _bootstrap_payload(
+    user_id: int | None,
+    is_admin_user: bool = False,
+    init_data_raw: str | None = None,
+) -> dict:
     rate = await er.get_rate()
     admin = await db.get_admin_settings()
     effective_rate = await get_effective_rate()
@@ -876,7 +880,21 @@ async def _bootstrap_payload(user_id: int | None, is_admin_user: bool = False) -
     user_settings = None
     if user_id:
         await _track_miniapp_activity(user_id)
-        user = await db.get_or_create_user(user_id)
+        init_user_profile = None
+        if isinstance(init_data_raw, str) and init_data_raw:
+            try:
+                candidate_profile = get_user_profile_from_init_data(init_data_raw)
+            except ValueError:
+                candidate_profile = None
+            if candidate_profile and int(candidate_profile.get("id") or 0) == int(user_id):
+                init_user_profile = candidate_profile
+
+        user = await db.get_or_create_user(
+            user_id,
+            (init_user_profile or {}).get("username", ""),
+            (init_user_profile or {}).get("first_name", ""),
+            (init_user_profile or {}).get("last_name", ""),
+        )
         user_settings = {
             "margin_steps": json.loads(user.get("margin_steps", "[]") or "[]"),
             "margin_min_rub": float(user.get("margin_min_rub", DEFAULT_MARGIN_MIN_RUB)),
@@ -1593,6 +1611,115 @@ def _build_admin_user_identity(user_id: int, username: str) -> dict[str, str | i
     }
 
 
+def _build_rich_admin_user_identity(
+    user_id: int,
+    username: str = "",
+    first_name: str = "",
+    last_name: str = "",
+) -> dict[str, str | int]:
+    clean_username = str(username or "").strip().lstrip("@")
+    clean_first_name = str(first_name or "").strip()
+    clean_last_name = str(last_name or "").strip()
+    full_name = " ".join(part for part in [clean_first_name, clean_last_name] if part).strip()
+    return {
+        "user_id": user_id,
+        "username": clean_username,
+        "first_name": clean_first_name,
+        "last_name": clean_last_name,
+        "contact_label": f"@{clean_username}" if clean_username else (full_name or f"id:{user_id}"),
+        "display_name": full_name or (f"@{clean_username}" if clean_username else f"Пользователь #{user_id}"),
+    }
+
+
+async def _fetch_telegram_user_identity(
+    user_id: int,
+    client: httpx.AsyncClient,
+) -> dict[str, str] | None:
+    if user_id <= 0 or not BOT_TOKEN:
+        return None
+
+    try:
+        response = await client.get(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/getChat",
+            params={"chat_id": user_id},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        chat_payload = payload.get("result") or {}
+        if not isinstance(chat_payload, dict):
+            return None
+
+        username = str(chat_payload.get("username") or "").strip().lstrip("@")
+        first_name = str(chat_payload.get("first_name") or "").strip()
+        last_name = str(chat_payload.get("last_name") or "").strip()
+        if not username and not first_name and not last_name:
+            return None
+
+        return {
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+        }
+    except Exception:
+        log.warning("Failed to resolve Telegram profile for user_id=%s", user_id, exc_info=True)
+        return None
+
+
+async def _resolve_admin_user_identities(rows: list[dict]) -> dict[int, dict[str, str | int]]:
+    identities: dict[int, dict[str, str | int]] = {}
+    missing_user_ids: list[int] = []
+
+    for row in rows:
+        user_id = int(row.get("user_id") or 0)
+        if user_id <= 0 or user_id in identities:
+            continue
+
+        username = str(row.get("username") or "").strip()
+        first_name = str(row.get("first_name") or "").strip()
+        last_name = str(row.get("last_name") or "").strip()
+        if username or first_name or last_name:
+            identities[user_id] = _build_rich_admin_user_identity(
+                user_id,
+                username,
+                first_name,
+                last_name,
+            )
+        else:
+            missing_user_ids.append(user_id)
+
+    if not missing_user_ids or not BOT_TOKEN:
+        for user_id in missing_user_ids:
+            identities[user_id] = _build_rich_admin_user_identity(user_id)
+        return identities
+
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        resolved_profiles = await asyncio.gather(
+            *(
+                _fetch_telegram_user_identity(user_id, client)
+                for user_id in missing_user_ids
+            ),
+        )
+
+    for user_id, resolved_profile in zip(missing_user_ids, resolved_profiles):
+        if resolved_profile:
+            persisted_profile = await db.get_or_create_user(
+                user_id,
+                resolved_profile.get("username", ""),
+                resolved_profile.get("first_name", ""),
+                resolved_profile.get("last_name", ""),
+            )
+            identities[user_id] = _build_rich_admin_user_identity(
+                user_id,
+                str(persisted_profile.get("username") or ""),
+                str(persisted_profile.get("first_name") or ""),
+                str(persisted_profile.get("last_name") or ""),
+            )
+        else:
+            identities[user_id] = _build_rich_admin_user_identity(user_id)
+
+    return identities
+
+
 def _extract_admin_calc_snapshot(row: dict) -> tuple[str, float | None]:
     image_url = ""
     goods_rub = None
@@ -1948,6 +2075,7 @@ async def _admin_orders_payload() -> dict:
         for row in await db.cart_get_all_orders()
         if bool(row.get("order_submitted"))
     ]
+    user_identities = await _resolve_admin_user_identities(rows)
 
     stats = {
         "users_total": 0,
@@ -1968,11 +2096,18 @@ async def _admin_orders_payload() -> dict:
     for row in rows:
         user_id = int(row.get("user_id") or 0)
         username = str(row.get("username") or "").strip()
+        user_identity = user_identities.get(user_id) or _build_rich_admin_user_identity(
+            user_id,
+            username,
+            str(row.get("first_name") or "").strip(),
+            str(row.get("last_name") or "").strip(),
+        )
 
         user_payload = users_map.get(user_id)
         if user_payload is None:
             user_payload = {
                 **_build_admin_user_identity(user_id, username),
+                **user_identity,
                 "total_items": 0,
                 "pending_items": 0,
                 "submitted_items": 0,
@@ -2164,6 +2299,7 @@ async def _admin_orders_update_payload(payload: dict) -> dict:
 
 async def _admin_carts_payload() -> dict:
     rows = await db.cart_get_all_carts()
+    user_identities = await _resolve_admin_user_identities(rows)
 
     stats = {
         "users_total": 0,
@@ -2179,6 +2315,12 @@ async def _admin_carts_payload() -> dict:
     for row in rows:
         user_id = int(row.get("user_id") or 0)
         username = str(row.get("username") or "").strip()
+        user_identity = user_identities.get(user_id) or _build_rich_admin_user_identity(
+            user_id,
+            username,
+            str(row.get("first_name") or "").strip(),
+            str(row.get("last_name") or "").strip(),
+        )
 
         user_payload = users_map.get(user_id)
         if user_payload is None:
@@ -2189,6 +2331,7 @@ async def _admin_carts_payload() -> dict:
                 "display_name": f"@{username}" if username else f"Пользователь #{user_id}",
                 "total_items": 0,
                 "items_in_order": 0,
+                **user_identity,
                 "subtotal_rub": 0.0,
                 "total_with_margin_rub": 0.0,
                 "items": [],
@@ -3323,7 +3466,11 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                 except ValueError:
                     self._send_json({"error": "Invalid init_data"}, status=403)
                     return
-                result = self._run(_bootstrap_payload(trusted_user_id, is_admin_user))
+                result = self._run(_bootstrap_payload(
+                    trusted_user_id,
+                    is_admin_user,
+                    payload.get("init_data", ""),
+                ))
                 self._send_json(result)
                 return
             if self.path == "/api/parse-product":
