@@ -48,7 +48,6 @@ import { getDeliverySettings } from '../../utils/deliveryPricing'
 import {
   derivePersistedVariantSelection,
   shouldAllowFallbackVariantSelection,
-  shouldAllowVariantSelectionWithoutPriceMap,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
 import { repairMojibakeDeep } from '../../utils/text'
@@ -227,7 +226,7 @@ function formatProductCnyLabel(product) {
 }
 
 function shouldKeepFallbackVariantsSelectable(product) {
-  return shouldAllowVariantSelectionWithoutPriceMap(product)
+  return shouldAllowFallbackVariantSelection(product)
 }
 
 
@@ -3036,10 +3035,11 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       (g) => (g.options || []).length >= 2 && SIZE_GROUP_NAMES.includes(g.name.toLowerCase())
     )
     const hasSizes = !variantHasSizes && (product.available_sizes || []).length >= 2
+    const canSelectStandaloneSizes = !hasSizes || shouldAllowFallbackVariantSelection(product)
     const variantGroups = (product.variants || []).filter((g) => (g.options || []).length >= 2)
     const shouldExposeOrderGuideStepFiveFocus = orderGuideOpen && orderGuideStep === 5
     const allVariantsSelected = variantGroups.every((g) => selVariants[g.name])
-    const sizeSelected = !hasSizes || !!selSize
+    const sizeSelected = !hasSizes || !canSelectStandaloneSizes || !!selSize
     const allOptionsSelected = allVariantsSelected && sizeSelected
     const hasSpecs = product.specs && Object.keys(product.specs).length > 0
     const canAddToCart = !isInCart && !cartAdding && !calcLoading && !!result && allOptionsSelected
@@ -3240,9 +3240,19 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                       && matchesOrderGuidePreferredSize(name)
                     return (
                       <button key={name}
-                        className={`cv-size pressable${selSize === name ? ' active' : ''}`}
+                        className={`cv-size pressable${selSize === name ? ' active' : ''}${!canSelectStandaloneSizes ? ' disabled' : ''}`}
                         data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
-                        onClick={() => { haptic?.('light'); setAddedToCart(false); addedCartUrlRef.current = null; setSavedCalcId(null); setSelSize((p) => (p === name ? '' : name)) }}>
+                        aria-disabled={!canSelectStandaloneSizes}
+                        disabled={!canSelectStandaloneSizes}
+                        style={!canSelectStandaloneSizes ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
+                        onClick={() => {
+                          if (!canSelectStandaloneSizes) return
+                          haptic?.('light')
+                          setAddedToCart(false)
+                          addedCartUrlRef.current = null
+                          setSavedCalcId(null)
+                          setSelSize((p) => (p === name ? '' : name))
+                        }}>
                         {name}
                       </button>
                     )

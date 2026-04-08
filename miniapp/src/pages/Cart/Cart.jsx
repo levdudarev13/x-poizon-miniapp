@@ -29,7 +29,6 @@ import { proxyImageUrl } from '../../utils/media'
 import {
   derivePersistedVariantSelection,
   shouldAllowFallbackVariantSelection,
-  shouldAllowVariantSelectionWithoutPriceMap,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
 import { parseRepairJson, repairMojibakeDeep } from '../../utils/text'
@@ -280,9 +279,10 @@ export default function Cart({ active, guidePreview = null }) {
     (g) => (g.options || []).length >= 2 && SIZE_NAMES.includes(g.name.toLowerCase())
   )
   const detailHasSizes = !detailVariantHasSizes && (detailProduct?.available_sizes || []).length >= 2
+  const detailCanSelectStandaloneSizes = !detailHasSizes || shouldAllowFallbackVariantSelection(detailProduct)
   const detailHasVariants = detailVariantGroups.length > 0 || detailHasSizes
   const detailAllVariantsSelected = detailVariantGroups.every((group) => detailSelVariants[group.name])
-  const detailAllOptionsSelected = detailAllVariantsSelected && (!detailHasSizes || Boolean(detailSelSize))
+  const detailAllOptionsSelected = detailAllVariantsSelected && (!detailHasSizes || !detailCanSelectStandaloneSizes || Boolean(detailSelSize))
   const detailSelectedOptionsText = [
     ...detailVariantGroups.map((group) => detailSelVariants[group.name]).filter(Boolean),
     ...(detailHasSizes && detailSelSize ? [detailSelSize] : []),
@@ -319,7 +319,7 @@ export default function Cart({ active, guidePreview = null }) {
   const detailIsOptionAvailable = useCallback(
     (groupName, opt, groupIndex) => {
       const map = detailProduct?.variant_price_map
-      if (!map || !Object.keys(map).length) return shouldAllowVariantSelectionWithoutPriceMap(detailProduct)
+      if (!map || !Object.keys(map).length) return shouldAllowFallbackVariantSelection(detailProduct)
       const filtered = detailGetFilteredEntries(groupIndex)
       return filtered.some(([k]) => {
         try { return JSON.parse(k).some(([g, o]) => g === groupName && o === opt) }
@@ -1165,8 +1165,12 @@ export default function Cart({ active, guidePreview = null }) {
                             return (
                               <button
                                 key={name}
-                                className={`cv-size pressable${detailSelSize === name ? ' active' : ''}`}
+                                className={`cv-size pressable${detailSelSize === name ? ' active' : ''}${!detailCanSelectStandaloneSizes ? ' disabled' : ''}`}
+                                aria-disabled={!detailCanSelectStandaloneSizes}
+                                disabled={!detailCanSelectStandaloneSizes}
+                                style={!detailCanSelectStandaloneSizes ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
                                 onClick={() => {
+                                  if (!detailCanSelectStandaloneSizes) return
                                   haptic?.('light')
                                   setDetailSelSize((p) => (p === name ? '' : name))
                                 }}

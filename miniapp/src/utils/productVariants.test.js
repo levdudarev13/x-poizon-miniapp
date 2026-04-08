@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  shouldAllowFallbackVariantSelection,
-  shouldAllowVariantSelectionWithoutPriceMap,
-} from './productVariants.js'
+import { shouldAllowFallbackVariantSelection } from './productVariants.js'
 
 const variantGroups = [
   { name: 'Color', options: ['Yellow', 'Apricot'] },
@@ -17,19 +14,6 @@ test('poizon starting-price products keep variant chips selectable without varia
       platform: 'poizon',
       price_cny: 42.49,
       price_is_starting: true,
-      variants: variantGroups,
-      variant_price_map: {},
-    }),
-    true,
-  )
-})
-
-test('poizon exact-price products still keep variant chips selectable without price map', () => {
-  assert.equal(
-    shouldAllowVariantSelectionWithoutPriceMap({
-      platform: 'poizon',
-      price_cny: 888,
-      price_is_starting: false,
       variants: variantGroups,
       variant_price_map: {},
     }),
@@ -57,6 +41,34 @@ test('poizon exact-price products still disable fallback variant selection', () 
       price_cny: 888,
       price_is_starting: false,
       variants: variantGroups,
+      variant_price_map: {},
+    }),
+    false,
+  )
+})
+
+test('poizon starting-price products with standalone available sizes keep fallback size selection enabled', () => {
+  assert.equal(
+    shouldAllowFallbackVariantSelection({
+      platform: 'poizon',
+      price_cny: 888,
+      price_is_starting: true,
+      variants: [],
+      available_sizes: ['40', '40.5', '41'],
+      variant_price_map: {},
+    }),
+    true,
+  )
+})
+
+test('poizon exact-price products with standalone available sizes keep size selection locked', () => {
+  assert.equal(
+    shouldAllowFallbackVariantSelection({
+      platform: 'poizon',
+      price_cny: 888,
+      price_is_starting: false,
+      variants: [],
+      available_sizes: ['40', '40.5', '41'],
       variant_price_map: {},
     }),
     false,

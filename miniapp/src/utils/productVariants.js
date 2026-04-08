@@ -16,7 +16,7 @@ function getSavedSelectionParts(product) {
     .filter(Boolean)
 }
 
-export function shouldAllowVariantSelectionWithoutPriceMap(product) {
+export function shouldAllowFallbackVariantSelection(product) {
   if (!product) {
     return false
   }
@@ -26,7 +26,7 @@ export function shouldAllowVariantSelectionWithoutPriceMap(product) {
     return false
   }
 
-  if (!hasSelectableVariantGroups(product)) {
+  if (!hasSelectableVariantGroups(product) && !(Array.isArray(product?.available_sizes) && product.available_sizes.length >= 2)) {
     return false
   }
 
@@ -35,15 +35,7 @@ export function shouldAllowVariantSelectionWithoutPriceMap(product) {
     return false
   }
 
-  return true
-}
-
-export function shouldAllowFallbackVariantSelection(product) {
-  if (!shouldAllowVariantSelectionWithoutPriceMap(product)) {
-    return false
-  }
-
-  const hasExactBasePrice = typeof product?.price_cny === 'number'
+  const hasExactBasePrice = typeof product.price_cny === 'number'
     && Number.isFinite(product.price_cny)
     && !product.price_is_starting
 
