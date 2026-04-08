@@ -126,8 +126,9 @@
 .admin-showcase__input {
   width: 100%;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.4;
   letter-spacing: 0.02em;
 }
 
