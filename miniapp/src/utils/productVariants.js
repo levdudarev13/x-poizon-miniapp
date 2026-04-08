@@ -8,8 +8,8 @@ export const POIZON_MANUAL_VARIANT_SELECTIONS = {
   left: 'Вариант по кнопке 05 (Poizon)',
   right: 'Вариант по кнопке 06 (Poizon)',
 }
-export const POIZON_MANUAL_VARIANT_HINT_TEXT = 'Нажмите на кнопку если нужный вам размер\nнаходится не в Китае или если вы хотите заказать товар с 95'
-export const POIZON_MANUAL_PRICE_HELPER_TEXT = 'Соответствующую выбранному размеру, как на Poizon, так как товар находится не в Китае.'
+export const POIZON_MANUAL_VARIANT_HINT_TEXT = 'Нажмите на кнопку если нужный вам размер\nнаходится не в Китае или если вы хотите заказать товар с платформы 95'
+export const POIZON_MANUAL_PRICE_HELPER_TEXT = 'соответствующую выбранному размеру, как на Poizon, так как товар находится не в Китае.'
 
 function normalizeOptionValue(value) {
   return typeof value === 'string' ? value.trim() : String(value || '').trim()

@@ -3202,8 +3202,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             {shouldShowManualPriceInput && (
               <div className="cp-manual">
                 <label className="cp-manual__label">
-                  <span>{product.price_is_starting ? 'Укажите точную цену в юанях (¥)' : 'Введите цену в юанях (¥)'}</span>
-                  <span className="cp-manual__label-copy">{POIZON_MANUAL_PRICE_HELPER_TEXT}</span>
+                  <span>
+                    {product.price_is_starting ? 'Укажите точную цену в юанях (¥)' : 'Введите цену в юанях (¥)'}, {POIZON_MANUAL_PRICE_HELPER_TEXT}
+                  </span>
                 </label>
                 <input ref={manualPriceInputRef} className="cp-manual__input" type="number" inputMode="decimal"
                   placeholder={product.price_is_starting ? 'например 1500 для выбранного варианта' : 'например 1500'}

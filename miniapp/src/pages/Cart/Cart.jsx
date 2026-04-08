@@ -1236,9 +1236,8 @@ export default function Cart({ active, guidePreview = null }) {
                           <span>
                             {detailProduct?.price_is_starting
                               ? 'Укажите точную цену в юанях (¥)'
-                              : 'Введите цену в юанях (¥)'}
+                              : 'Введите цену в юанях (¥)'}, {POIZON_MANUAL_PRICE_HELPER_TEXT}
                           </span>
-                          <span className="cart-detail__manual-price-copy">{POIZON_MANUAL_PRICE_HELPER_TEXT}</span>
                         </label>
                         <input
                           id="cart-detail-manual-price"
