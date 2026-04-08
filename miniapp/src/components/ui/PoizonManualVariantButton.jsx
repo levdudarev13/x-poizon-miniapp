@@ -45,7 +45,7 @@ export default function PoizonManualVariantButton({
           <button
             key={option.id}
             type="button"
-            className={`poizon-manual-choice pressable${isActive ? ' is-active' : ''}`}
+            className={`poizon-manual-choice poizon-manual-choice--${option.id} pressable${isActive ? ' is-active' : ''}`}
             aria-pressed={isActive}
             onClick={() => onSelect?.(option.id)}
           >

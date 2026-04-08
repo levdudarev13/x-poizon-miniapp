@@ -22,6 +22,10 @@
   transform: none;
 }
 
+.poizon-manual-choice--right {
+  margin-top: -4px;
+}
+
 .poizon-manual-choice__preview {
   display: block;
   width: 100%;
@@ -33,7 +37,7 @@
 
 .poizon-manual-choice__frames {
   position: absolute;
-  top: 0;
+  top: 4px;
   right: 0;
   left: auto;
   width: 68px;
