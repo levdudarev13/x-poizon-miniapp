@@ -631,6 +631,43 @@
   animation: fadeUp .25s var(--ease-smooth, ease);
 }
 
+.cart-detail__manual-price {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.cart-detail__manual-price-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.cart-detail__manual-price-input {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.cart-detail__manual-price-input:focus {
+  border-color: var(--accent);
+}
+
+.cart-detail__manual-price-input::placeholder {
+  color: rgba(255, 255, 255, 0.34);
+  opacity: 1;
+}
+
+.cart-detail__manual-price-note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .cart-detail__recalc-bar {
   height: 2px;
   background: var(--accent);

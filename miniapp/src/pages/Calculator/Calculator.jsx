@@ -45,7 +45,11 @@ import {
   normalizePromoBanner,
 } from '../../utils/promoBanners'
 import { getDeliverySettings } from '../../utils/deliveryPricing'
-import { shouldAllowFallbackVariantSelection } from '../../utils/productVariants'
+import {
+  derivePersistedVariantSelection,
+  shouldAllowFallbackVariantSelection,
+  shouldRequireManualPriceForSelection,
+} from '../../utils/productVariants'
 import { repairMojibakeDeep } from '../../utils/text'
 import './Calculator.css'
 
@@ -987,6 +991,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [selVariants, setSelVariants] = useState({})
   const [selSize, setSelSize] = useState('')
   const [manualPrice, setManualPrice] = useState('')
+  const [persistedSelectionBaseline, setPersistedSelectionBaseline] = useState(null)
+  const fallbackSelectionResetKeyRef = useRef('')
 
   const [savedCalcId, setSavedCalcId] = useState(null)
   const [addedToCart, setAddedToCart] = useState(false)
@@ -1085,6 +1091,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       notes: data?.notes || '',
       auto_detected: [],
     }
+    const restoredSelection = derivePersistedVariantSelection(nextProduct)
+    const persistedCalcId = data?.calc_id || data?.id || null
 
     const nextBreakdown = Array.isArray(data?.breakdown)
       ? data.breakdown
@@ -1111,11 +1119,16 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     skipNextAutoCalculateRef.current = Boolean(nextResult)
     setProduct(nextProduct)
     setActiveImg(0)
-    setSelVariants({})
-    setSelSize('')
+    setSelVariants(restoredSelection.selectedVariants)
+    setSelSize(restoredSelection.selectedSize)
     setManualPrice('')
+    setPersistedSelectionBaseline({
+      calcId: persistedCalcId,
+      priceCny: nextProduct.price_cny ?? null,
+      size: String(nextProduct.size || '').trim(),
+    })
     setResult(nextResult)
-    setSavedCalcId(data?.calc_id || data?.id || null)
+    setSavedCalcId(persistedCalcId)
     setAddedToCart(false)
     addedCartUrlRef.current = null
     setSpecsOpen(false)
@@ -1134,6 +1147,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setSelSize('')
     setAddedToCart(false)
     addedCartUrlRef.current = null
+    setPersistedSelectionBaseline(null)
     setSavedCalcId(null)
   }, [])
 
@@ -1151,6 +1165,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setSelVariants({})
     setSelSize('')
     setManualPrice('')
+    setPersistedSelectionBaseline(null)
     setSavedCalcId(null)
     setAddedToCart(false)
     addedCartUrlRef.current = null
@@ -1292,6 +1307,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setSelVariants({})
     setSelSize('')
     setManualPrice('')
+    setPersistedSelectionBaseline(null)
     setResult(null)
     setSavedCalcId(null)
     setAddedToCart(false)
@@ -1649,8 +1665,25 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     ? [product.image_url, ...(product.extra_images || [])].filter(Boolean).map(proxyImageUrl)
     : []
 
+  const selectedOptionsText = getSelectedOptionsText(product, selVariants, selSize)
+  const pricingSourceProduct = product && persistedSelectionBaseline?.calcId && savedCalcId === persistedSelectionBaseline.calcId
+    ? {
+        ...product,
+        price_cny: persistedSelectionBaseline.priceCny ?? product.price_cny,
+        size: persistedSelectionBaseline.size || product.size || '',
+      }
+    : product
+  const manualVariantPriceRequired = shouldRequireManualPriceForSelection(pricingSourceProduct, selectedOptionsText)
+  const priceStateProduct = manualVariantPriceRequired && pricingSourceProduct
+    ? {
+        ...pricingSourceProduct,
+        price_cny: null,
+        price_is_starting: true,
+      }
+    : pricingSourceProduct
+
   /* ── current price from variants (cascade-aware) ── */
-  const priceState = resolveProductPriceState(product, selVariants, manualPrice)
+  const priceState = resolveProductPriceState(priceStateProduct, selVariants, manualPrice)
 
   /* ── cascade helpers ── */
   const getFilteredEntries = useCallback(
@@ -1770,7 +1803,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const displayPriceCny = priceState.displayPrice
   const hasStartingPrice = priceState.isStartingPrice
   const curPriceRub = curPrice && rate ? Math.round(curPrice * rate.cny_rub) : null
-  const selectedOptionsText = getSelectedOptionsText(product, selVariants, selSize)
   const deliverySettings = getDeliverySettings(adminSettings || {})
   const pricingSnapshot = JSON.stringify({
     rate: rate?.cny_rub ?? null,
@@ -1805,6 +1837,28 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const showAnimatedSearchHint = shouldShowSearchHint && !prefersReducedMotion
   const showStaticSearchHint = shouldShowSearchHint && !showAnimatedSearchHint
   const allowAnimatedIntro = active && !prefersReducedMotion && !isTelegramWebView
+
+  useEffect(() => {
+    const baselineSelection = String(pricingSourceProduct?.size || '').trim()
+    const shouldTrackSelectionChanges = shouldAllowFallbackVariantSelection(pricingSourceProduct) && baselineSelection
+    const selectionResetKey = shouldTrackSelectionChanges
+      ? `${savedCalcId || 'persisted'}:${selectedOptionsText}`
+      : ''
+
+    if (!selectionResetKey) {
+      fallbackSelectionResetKeyRef.current = ''
+      return
+    }
+
+    if (
+      fallbackSelectionResetKeyRef.current
+      && fallbackSelectionResetKeyRef.current !== selectionResetKey
+    ) {
+      setManualPrice('')
+    }
+
+    fallbackSelectionResetKeyRef.current = selectionResetKey
+  }, [pricingSourceProduct, savedCalcId, selectedOptionsText])
 
   /* ── auto-calculate when price changes ── */
   const calcKey = step === 'product' && product && curPrice
@@ -1844,6 +1898,14 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         if (!r.error) {
           setResult(r)
           if (r.calc_id) setSavedCalcId(r.calc_id)
+          if (savedCalcId) {
+            setPersistedSelectionBaseline({
+              calcId: r.calc_id || savedCalcId,
+              priceCny: curPrice,
+              size: String(selectedOptionsText || '').trim(),
+            })
+            setManualPrice('')
+          }
         }
         setCalcLoading(false)
       })
@@ -1910,6 +1972,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setSelVariants({})
       setSelSize('')
       setManualPrice('')
+      setPersistedSelectionBaseline(null)
       setResult(null)
       setSavedCalcId(null)
       setAddedToCart(false)
@@ -2082,6 +2145,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     addedCartUrlRef.current = null
     if ((step === 'product' || step === 'loading') && searchResults.length > 0) {
       setProduct(null)
+      setPersistedSelectionBaseline(null)
       setResult(null)
       setError(null)
       setSavedCalcId(null)
@@ -2090,6 +2154,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     } else {
       setStep('idle')
       setProduct(null)
+      setPersistedSelectionBaseline(null)
       setResult(null)
       setError(null)
       setSavedCalcId(null)
@@ -2214,6 +2279,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setSelVariants({})
     setSelSize('')
     setManualPrice('')
+    setPersistedSelectionBaseline(null)
     setResult(null)
     setSavedCalcId(null)
     setAddedToCart(false)
@@ -2976,10 +3042,12 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     const allOptionsSelected = allVariantsSelected && sizeSelected
     const hasSpecs = product.specs && Object.keys(product.specs).length > 0
     const canAddToCart = !isInCart && !cartAdding && !calcLoading && !!result && allOptionsSelected
-    const waitingForExactPriceSelection = Boolean(product.price_is_starting && !allOptionsSelected)
+    const waitingForExactPriceSelection = Boolean((product.price_is_starting || manualVariantPriceRequired) && !allOptionsSelected)
     const hasExactPriceFromData = priceState.source === 'base' || priceState.source === 'variant'
     const shouldShowManualPriceInput = Boolean(
-      !hasExactPriceFromData && (
+      manualVariantPriceRequired
+        ? allOptionsSelected
+        : !hasExactPriceFromData && (
         product.price_cny == null || (product.price_is_starting && allOptionsSelected)
       )
     )

@@ -26,7 +26,11 @@ import { BUYER_STATE_COPY } from '../../constants/buyerStateContent'
 import { BUYER_STATUS_META } from '../../constants/buyerStatusMeta'
 import { useTelegram } from '../../hooks/useTelegram'
 import { proxyImageUrl } from '../../utils/media'
-import { shouldAllowFallbackVariantSelection } from '../../utils/productVariants'
+import {
+  derivePersistedVariantSelection,
+  shouldAllowFallbackVariantSelection,
+  shouldRequireManualPriceForSelection,
+} from '../../utils/productVariants'
 import { parseRepairJson, repairMojibakeDeep } from '../../utils/text'
 import './Cart.css'
 
@@ -107,9 +111,11 @@ export default function Cart({ active, guidePreview = null }) {
   const [detailVariantsOpen, setDetailVariantsOpen] = useState(false)
   const [detailSelVariants, setDetailSelVariants] = useState({})
   const [detailSelSize, setDetailSelSize] = useState('')
+  const [detailManualPrice, setDetailManualPrice] = useState('')
   const [detailRecalcLoading, setDetailRecalcLoading] = useState(false)
   const detailTouchX = useRef(null)
   const detailRecalcTimer = useRef(null)
+  const detailSelectionResetKeyRef = useRef('')
 
   // Clear confirmation
   const [showClear, setShowClear] = useState(false)
@@ -237,6 +243,8 @@ export default function Cart({ active, guidePreview = null }) {
     setDetailVariantsOpen(false)
     setDetailSelVariants({})
     setDetailSelSize('')
+    setDetailManualPrice('')
+    detailSelectionResetKeyRef.current = ''
     try {
       const data = await apiFetch('/api/cart/item-detail', {
         method: 'POST',
@@ -257,6 +265,10 @@ export default function Cart({ active, guidePreview = null }) {
     setDetailItem(null)
     setDetailData(null)
     setDetailError(false)
+    setDetailSelVariants({})
+    setDetailSelSize('')
+    setDetailManualPrice('')
+    detailSelectionResetKeyRef.current = ''
   }
 
   // ── Variant helpers for detail view ──
@@ -268,6 +280,18 @@ export default function Cart({ active, guidePreview = null }) {
   )
   const detailHasSizes = !detailVariantHasSizes && (detailProduct?.available_sizes || []).length >= 2
   const detailHasVariants = detailVariantGroups.length > 0 || detailHasSizes
+  const detailAllVariantsSelected = detailVariantGroups.every((group) => detailSelVariants[group.name])
+  const detailAllOptionsSelected = detailAllVariantsSelected && (!detailHasSizes || Boolean(detailSelSize))
+  const detailSelectedOptionsText = [
+    ...detailVariantGroups.map((group) => detailSelVariants[group.name]).filter(Boolean),
+    ...(detailHasSizes && detailSelSize ? [detailSelSize] : []),
+  ].join(' / ')
+  const detailSavedSizeText = String(detailProduct?.size || detailItem?.size || '').trim()
+  const detailSizeText = detailSelectedOptionsText || detailSavedSizeText
+  const detailManualPriceRequired = shouldRequireManualPriceForSelection(detailProduct, detailSelectedOptionsText)
+  const detailNeedsManualPriceInput = detailAllOptionsSelected && (
+    detailManualPriceRequired || Boolean(detailProduct?.price_is_starting)
+  )
 
   const detailGetFilteredEntries = useCallback(
     (groupIndex) => {
@@ -323,6 +347,10 @@ export default function Cart({ active, guidePreview = null }) {
 
   const detailGetCurrentPrice = useCallback(() => {
     if (!detailProduct) return null
+    if (detailManualPriceRequired || detailProduct.price_is_starting) {
+      const parsedManualPrice = Number.parseFloat(String(detailManualPrice).replace(',', '.'))
+      return Number.isFinite(parsedManualPrice) && parsedManualPrice > 0 ? parsedManualPrice : null
+    }
     const map = detailProduct.variant_price_map
     const groups = detailProduct.variants || []
     if (map && Object.keys(map).length && Object.keys(detailSelVariants).length) {
@@ -348,14 +376,19 @@ export default function Cart({ active, guidePreview = null }) {
       }
     }
     return detailProduct.price_cny
-  }, [detailProduct, detailSelVariants])
+  }, [detailManualPrice, detailManualPriceRequired, detailProduct, detailSelVariants])
 
   const detailCurPrice = detailGetCurrentPrice()
-  const detailSizeText = detailSelSize || Object.values(detailSelVariants).join(' / ') || detailItem?.size || ''
 
   // Initialize variant selections when detail data loads
   useEffect(() => {
     if (!detailData?.product) return
+    const restoredSelection = derivePersistedVariantSelection(detailData.product)
+    setDetailSelVariants(restoredSelection.selectedVariants)
+    setDetailSelSize(restoredSelection.selectedSize)
+    setDetailManualPrice('')
+    detailSelectionResetKeyRef.current = ''
+    return
     const prod = detailData.product
     const groups = (prod.variants || []).filter((g) => (g.options || []).length >= 2)
     const savedSize = prod.size || ''
@@ -431,6 +464,28 @@ export default function Cart({ active, guidePreview = null }) {
     if (changed) setDetailSelVariants(next)
   }, [detailProduct, detailSelVariants])
 
+  useEffect(() => {
+    const baselineSelection = String(detailProduct?.size || '').trim()
+    const shouldTrackSelectionChanges = shouldAllowFallbackVariantSelection(detailProduct) && baselineSelection
+    const selectionResetKey = shouldTrackSelectionChanges
+      ? `${detailItem?.id || 'detail'}:${detailSelectedOptionsText}`
+      : ''
+
+    if (!selectionResetKey) {
+      detailSelectionResetKeyRef.current = ''
+      return
+    }
+
+    if (
+      detailSelectionResetKeyRef.current
+      && detailSelectionResetKeyRef.current !== selectionResetKey
+    ) {
+      setDetailManualPrice('')
+    }
+
+    detailSelectionResetKeyRef.current = selectionResetKey
+  }, [detailItem?.id, detailProduct, detailSelectedOptionsText])
+
   // Recalculate & auto-save when variant/size changes
   const detailItemRef = useRef(null)
   const detailDataRef = useRef(null)
@@ -441,6 +496,7 @@ export default function Cart({ active, guidePreview = null }) {
     const item = detailItemRef.current
     const data = detailDataRef.current
     if (!item || !data || !detailCurPrice) return
+    if (detailHasVariants && !detailAllOptionsSelected) return
     // Skip if nothing actually changed
     const origPrice = data.product?.price_cny
     const origSize = data.product?.size || item.size || ''
@@ -465,12 +521,13 @@ export default function Cart({ active, guidePreview = null }) {
           subtotal_rub: resp.subtotal_rub,
           exchange_rate: resp.exchange_rate,
           delivery_info: resp.delivery_info || prev?.delivery_info,
-          product: { ...prev.product, price_cny: detailCurPrice, size: detailSizeText },
+          product: { ...prev.product, price_cny: detailCurPrice, price_is_starting: false, size: detailSizeText },
         }))
         setItems(prev => prev.map(i =>
           i.id === item.id ? { ...i, size: detailSizeText, subtotal_rub: resp.subtotal_rub } : i
         ))
         setDetailItem(prev => prev ? { ...prev, size: detailSizeText } : prev)
+        setDetailManualPrice('')
       } catch {
         // silent
       } finally {
@@ -479,7 +536,7 @@ export default function Cart({ active, guidePreview = null }) {
     }, 400)
 
     return () => clearTimeout(detailRecalcTimer.current)
-  }, [detailCurPrice, detailSizeText, userId])
+  }, [detailAllOptionsSelected, detailCurPrice, detailHasVariants, detailSizeText, userId])
 
   const handleToggleOrder = async (calcId, currentInOrder) => {
     if (isGuidePreview) return
@@ -644,6 +701,11 @@ export default function Cart({ active, guidePreview = null }) {
     note: index === 0 ? row.note : null,
     amount: formatBuyerRub(row.amount_rub),
   }))
+  const detailShouldHidePriceBreakdown = detailNeedsManualPriceInput && !detailCurPrice
+  const detailDisplayBreakdownRows = detailShouldHidePriceBreakdown ? [] : detailBreakdownRows
+  const detailDisplayTotalAmount = detailShouldHidePriceBreakdown
+    ? 'Уточните цену'
+    : formatBuyerRub(detailData?.subtotal_rub)
   const detailDeliveryInfo = {
     standard_days: detailData?.delivery_info?.standard_days || '',
     express_days: detailData?.delivery_info?.express_days || '',
@@ -1115,6 +1177,27 @@ export default function Cart({ active, guidePreview = null }) {
                         </div>
                       </div>
                     ) : null}
+                    {detailNeedsManualPriceInput ? (
+                      <div className="cart-detail__manual-price">
+                        <label className="cart-detail__manual-price-label" htmlFor="cart-detail-manual-price">
+                          {detailProduct?.price_is_starting
+                            ? 'Укажите точную цену в юанях (¥)'
+                            : 'Введите цену в юанях (¥) для выбранного варианта'}
+                        </label>
+                        <input
+                          id="cart-detail-manual-price"
+                          className="cart-detail__manual-price-input"
+                          type="number"
+                          inputMode="decimal"
+                          placeholder={detailProduct?.price_is_starting ? 'например 1500 для выбранного варианта' : 'например 1500'}
+                          value={detailManualPrice}
+                          onChange={(event) => setDetailManualPrice(event.target.value)}
+                        />
+                        <div className="cart-detail__manual-price-note">
+                          После ввода цены расчёт в корзине обновится автоматически.
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -1122,8 +1205,8 @@ export default function Cart({ active, guidePreview = null }) {
 
             <PriceBreakdown
               title="Расчёт стоимости"
-              rows={detailBreakdownRows}
-              totalAmount={formatBuyerRub(detailData.subtotal_rub)}
+              rows={detailDisplayBreakdownRows}
+              totalAmount={detailDisplayTotalAmount}
             />
 
             <div className="cart-detail__info-block card">

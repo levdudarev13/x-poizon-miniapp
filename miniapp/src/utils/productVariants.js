@@ -3,6 +3,19 @@ export function hasSelectableVariantGroups(product) {
     && product.variants.some((group) => (group?.options || []).length >= 2)
 }
 
+const SIZE_GROUP_NAMES = ['size', 'размер', 'sz', 'taille', '尺码', '尺寸']
+
+function normalizeOptionValue(value) {
+  return typeof value === 'string' ? value.trim() : String(value || '').trim()
+}
+
+function getSavedSelectionParts(product) {
+  return String(product?.size || '')
+    .split(' / ')
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 export function shouldAllowFallbackVariantSelection(product) {
   if (!product) {
     return false
@@ -22,9 +35,51 @@ export function shouldAllowFallbackVariantSelection(product) {
     return false
   }
 
-  const hasExactBasePrice = typeof product.price_cny === 'number'
-    && Number.isFinite(product.price_cny)
-    && !product.price_is_starting
+  return true
+}
 
-  return !hasExactBasePrice
+export function derivePersistedVariantSelection(product) {
+  const savedParts = getSavedSelectionParts(product)
+  const groups = Array.isArray(product?.variants)
+    ? product.variants.filter((group) => (group?.options || []).length >= 2)
+    : []
+  const selectedVariants = {}
+
+  for (const group of groups) {
+    const options = (group.options || [])
+      .map((option) => normalizeOptionValue(typeof option === 'string' ? option : option?.name))
+      .filter(Boolean)
+    const match = savedParts.find((part) => options.includes(part))
+    if (match) {
+      selectedVariants[group.name] = match
+    }
+  }
+
+  const hasVariantSizeGroup = groups.some((group) => SIZE_GROUP_NAMES.includes(normalizeOptionValue(group.name).toLowerCase()))
+  let selectedSize = ''
+  if (!hasVariantSizeGroup && Array.isArray(product?.available_sizes) && product.available_sizes.length >= 2) {
+    const sizeOptions = product.available_sizes
+      .map((option) => normalizeOptionValue(typeof option === 'string' ? option : option?.name))
+      .filter(Boolean)
+    selectedSize = sizeOptions.find((size) => savedParts.includes(size) || String(product?.size || '').includes(size)) || ''
+  }
+
+  return {
+    selectedVariants,
+    selectedSize,
+  }
+}
+
+export function shouldRequireManualPriceForSelection(product, selectionText = '') {
+  if (!shouldAllowFallbackVariantSelection(product)) {
+    return false
+  }
+
+  const savedSelection = normalizeOptionValue(product?.size)
+  const currentSelection = normalizeOptionValue(selectionText)
+  if (!savedSelection || !currentSelection) {
+    return false
+  }
+
+  return savedSelection !== currentSelection
 }
