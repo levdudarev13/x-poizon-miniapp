@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting...</title>
+    <script>
+      (function () {
+        var target = new URL("/", window.location.origin);
+        target.search = window.location.search || "";
+        target.hash = window.location.hash || "";
+        window.location.replace(target.toString());
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>
