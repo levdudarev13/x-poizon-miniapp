@@ -99,14 +99,14 @@ function AdminPoizonVariantBadge({ badgeType }) {
 
   if (badgeType === '50505') {
     return (
-      <span className="admin-order-item__poizon-badge" aria-hidden="true">
+      <span className="admin-order-item__poizon-badge admin-order-item__poizon-badge--50505" aria-hidden="true">
         <img src="/50505.png" alt="" className="admin-order-item__poizon-badge-image admin-order-item__poizon-badge-image--static" decoding="async" />
       </span>
     )
   }
 
   return (
-    <span className="admin-order-item__poizon-badge" aria-hidden="true">
+    <span className="admin-order-item__poizon-badge admin-order-item__poizon-badge--frames" aria-hidden="true">
       {ADMIN_POIZON_FRAME_SOURCES.map((src, index) => (
         <img
           key={src}
@@ -125,7 +125,7 @@ function AdminPoizonVariantNote({ meta }) {
     <div className="admin-order-item__poizon-note">
       <div className="admin-order-item__poizon-line admin-order-item__poizon-line--primary">
         <span className="admin-order-item__poizon-title">{meta.title}</span>
-        <span className="admin-order-item__poizon-badge-wrap">
+        <span className={`admin-order-item__poizon-badge-wrap admin-order-item__poizon-badge-wrap--${meta.badgeType}`}>
           <span className="admin-order-item__poizon-bracket">(</span>
           <AdminPoizonVariantBadge badgeType={meta.badgeType} />
           <span className="admin-order-item__poizon-bracket admin-order-item__poizon-bracket--closing">)</span>

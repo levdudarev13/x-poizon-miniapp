@@ -334,33 +334,54 @@
 .admin-order-item__poizon-badge-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   flex: 0 0 auto;
   white-space: nowrap;
-  padding-right: 6px;
+  padding-right: 10px;
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1;
+}
+
+.admin-order-item__poizon-badge-wrap--frames {
+  margin-left: 2px;
+  padding-right: 14px;
+}
+
+.admin-order-item__poizon-badge-wrap--50505 {
+  margin-left: 4px;
+  padding-right: 12px;
 }
 
 .admin-order-item__poizon-bracket {
   display: inline-flex;
   align-items: center;
+  font-size: 18px;
   line-height: 1;
 }
 
 .admin-order-item__poizon-bracket--closing {
-  margin-left: 2px;
+  margin-left: 4px;
 }
 
 .admin-order-item__poizon-badge {
   position: relative;
   display: inline-flex;
-  width: 58px;
-  height: 28px;
+  width: 64px;
+  height: 30px;
   flex: 0 0 auto;
   overflow: visible;
+}
+
+.admin-order-item__poizon-badge--frames {
+  margin-left: 2px;
+  margin-right: 6px;
+}
+
+.admin-order-item__poizon-badge--50505 {
+  margin-left: 4px;
+  margin-right: 6px;
 }
 
 .admin-order-item__poizon-badge-image {
@@ -370,9 +391,13 @@
   height: 100%;
   object-fit: contain;
   opacity: 0;
-  transform: scale(1.42);
+  transform: scale(1.5);
   transform-origin: center;
   transition: opacity 180ms ease;
+}
+
+.admin-order-item__poizon-badge--50505 .admin-order-item__poizon-badge-image {
+  transform: translateX(3px) scale(1.54);
 }
 
 .admin-order-item__poizon-badge-image.is-visible,
