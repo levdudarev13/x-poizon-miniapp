@@ -500,7 +500,7 @@ export default function Cart({ active, guidePreview = null }) {
       detailSelectionResetKeyRef.current
       && detailSelectionResetKeyRef.current !== selectionResetKey
     ) {
-      setDetailManualPrice('')
+      pendingDetailManualScrollRef.current = false
     }
 
     detailSelectionResetKeyRef.current = selectionResetKey

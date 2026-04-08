@@ -1869,7 +1869,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       fallbackSelectionResetKeyRef.current
       && fallbackSelectionResetKeyRef.current !== selectionResetKey
     ) {
-      setManualPrice('')
+      pendingManualPriceScrollRef.current = false
     }
 
     fallbackSelectionResetKeyRef.current = selectionResetKey

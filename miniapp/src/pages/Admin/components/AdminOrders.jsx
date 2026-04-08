@@ -27,6 +27,7 @@ import {
   AdminUserAvatar,
   AdminValueDialog,
 } from './AdminSharedBits.jsx'
+import { POIZON_MANUAL_VARIANT_SELECTIONS } from '../../../utils/productVariants.js'
 
 const EMPTY_STATS = {
   users_total: 0,
@@ -39,12 +40,102 @@ const EMPTY_STATS = {
   latest_order_added_at_label: '—',
 }
 
+const ADMIN_POIZON_FRAME_SOURCES = [
+  '/10101.png',
+  '/20202.png',
+  '/30303.png',
+  '/40404.png',
+]
+
 function getOrderItemKey(item) {
   return `${item.user_id}:${item.calc_id}`
 }
 
 function getDisplayItemNumber(item) {
   return String(item?.item_number || item?.calc_id || '').trim().replace(/^#+/, '')
+}
+
+function resolveAdminPoizonVariant(value) {
+  const normalizedValue = String(value || '').trim()
+
+  if (normalizedValue === POIZON_MANUAL_VARIANT_SELECTIONS.left) {
+    return {
+      id: 'left',
+      title: 'Вариант товара не из Китая',
+      note: 'Уточните размер у покупателя',
+      badgeType: 'frames',
+    }
+  }
+
+  if (normalizedValue === POIZON_MANUAL_VARIANT_SELECTIONS.right) {
+    return {
+      id: 'right',
+      title: 'Вариант товара с платформы 95',
+      note: 'Уточните размер у покупателя',
+      badgeType: '50505',
+    }
+  }
+
+  return null
+}
+
+function AdminPoizonVariantBadge({ badgeType }) {
+  const [frameIndex, setFrameIndex] = useState(0)
+
+  useEffect(() => {
+    if (badgeType !== 'frames') {
+      setFrameIndex(0)
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      setFrameIndex((currentFrameIndex) => (currentFrameIndex + 1) % ADMIN_POIZON_FRAME_SOURCES.length)
+    }, 500)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [badgeType])
+
+  if (badgeType === '50505') {
+    return (
+      <span className="admin-order-item__poizon-badge" aria-hidden="true">
+        <img src="/50505.png" alt="" className="admin-order-item__poizon-badge-image admin-order-item__poizon-badge-image--static" decoding="async" />
+      </span>
+    )
+  }
+
+  return (
+    <span className="admin-order-item__poizon-badge" aria-hidden="true">
+      {ADMIN_POIZON_FRAME_SOURCES.map((src, index) => (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          className={`admin-order-item__poizon-badge-image${index === frameIndex ? ' is-visible' : ''}`}
+          decoding="async"
+        />
+      ))}
+    </span>
+  )
+}
+
+function AdminPoizonVariantNote({ meta }) {
+  return (
+    <div className="admin-order-item__poizon-note">
+      <div className="admin-order-item__poizon-line admin-order-item__poizon-line--primary">
+        <span className="admin-order-item__poizon-title">{meta.title}</span>
+        <span className="admin-order-item__poizon-badge-wrap">
+          <span>(</span>
+          <AdminPoizonVariantBadge badgeType={meta.badgeType} />
+          <span>)</span>
+        </span>
+      </div>
+      <div className="admin-order-item__poizon-line admin-order-item__poizon-line--secondary">
+        {meta.note}
+      </div>
+    </div>
+  )
 }
 
 function normalizeAdminVariantRows(rawVariants) {
@@ -61,6 +152,7 @@ function normalizeAdminVariantRows(rawVariants) {
       return {
         label: label || `Вариант ${index + 1}`,
         value,
+        poizonMeta: resolveAdminPoizonVariant(value),
       }
     })
     .filter(Boolean)
@@ -72,7 +164,7 @@ function getOrderParameterRows(item) {
 
   const sizeText = String(item?.size_text || '').trim()
   return sizeText
-    ? [{ label: 'Выбранный вариант', value: sizeText }]
+    ? [{ label: 'Выбранный вариант', value: sizeText, poizonMeta: resolveAdminPoizonVariant(sizeText) }]
     : []
 }
 
@@ -525,10 +617,16 @@ export function AdminOrders({ initData, onBack, haptic, tg }) {
                             {selectedVariants.length ? (
                               <div className="admin-order-item__variant-list">
                                 {selectedVariants.map((variant) => (
-                                  <div key={`${itemKey}-${variant.label}-${variant.value}`} className="admin-order-item__variant-row">
-                                    <span className="admin-order-item__variant-label">{variant.label}</span>
-                                    <strong className="admin-order-item__variant-value">{variant.value}</strong>
-                                  </div>
+                                  variant.poizonMeta ? (
+                                    <div key={`${itemKey}-${variant.label}-${variant.value}`} className="admin-order-item__variant-row admin-order-item__variant-row--poizon">
+                                      <AdminPoizonVariantNote meta={variant.poizonMeta} />
+                                    </div>
+                                  ) : (
+                                    <div key={`${itemKey}-${variant.label}-${variant.value}`} className="admin-order-item__variant-row">
+                                      <span className="admin-order-item__variant-label">{variant.label}</span>
+                                      <strong className="admin-order-item__variant-value">{variant.value}</strong>
+                                    </div>
+                                  )
                                 ))}
                               </div>
                             ) : (

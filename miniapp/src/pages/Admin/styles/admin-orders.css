@@ -250,6 +250,10 @@
   min-width: 0;
 }
 
+.admin-order-item__variant-row--poizon {
+  display: block;
+}
+
 .admin-order-item__variant-row + .admin-order-item__variant-row {
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -289,6 +293,75 @@
   font-weight: 700;
   line-height: 1.45;
   word-break: break-word;
+}
+
+.admin-order-item__poizon-note {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-order-item__poizon-line {
+  min-width: 0;
+}
+
+.admin-order-item__poizon-line--primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-order-item__poizon-line--secondary {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.admin-order-item__poizon-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.admin-order-item__poizon-badge-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.admin-order-item__poizon-badge {
+  position: relative;
+  display: inline-flex;
+  width: 30px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.admin-order-item__poizon-badge-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.admin-order-item__poizon-badge-image.is-visible,
+.admin-order-item__poizon-badge-image--static {
+  opacity: 1;
 }
 
 .admin-order-item__variant-empty {

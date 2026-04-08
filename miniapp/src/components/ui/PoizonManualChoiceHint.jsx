@@ -16,9 +16,10 @@ export default function PoizonManualChoiceHint({
   const [firstLine = '', secondLine = ''] = hintLines
   const questionMarker = '95'
   const questionMarkerIndex = secondLine.lastIndexOf(questionMarker)
-  const secondLineBeforeMarker = questionMarkerIndex >= 0
-    ? secondLine.slice(0, questionMarkerIndex + questionMarker.length)
+  const secondLineLeadingText = questionMarkerIndex >= 0
+    ? secondLine.slice(0, questionMarkerIndex)
     : secondLine
+  const secondLineMarkerText = questionMarkerIndex >= 0 ? questionMarker : ''
   const secondLineAfterMarker = questionMarkerIndex >= 0
     ? secondLine.slice(questionMarkerIndex + questionMarker.length)
     : ''
@@ -38,15 +39,20 @@ export default function PoizonManualChoiceHint({
       {secondLine ? (
         <span className="poizon-manual-choice-hint__line">
           <span className="poizon-manual-choice-hint__line-copy">
-            {secondLineBeforeMarker}
-            <button
-              type="button"
-              className="poizon-manual-choice-hint__faq-button pressable"
-              aria-label="Открыть FAQ и 4 вопрос"
-              onClick={handleOpenFaq}
-            >
-              <IconQuestion size={18} />
-            </button>
+            {secondLineLeadingText}
+            {secondLineMarkerText ? (
+              <span className="poizon-manual-choice-hint__marker-group">
+                <span>{secondLineMarkerText}</span>
+                <button
+                  type="button"
+                  className="poizon-manual-choice-hint__faq-button pressable"
+                  aria-label="Открыть FAQ и 4 вопрос"
+                  onClick={handleOpenFaq}
+                >
+                  <IconQuestion size={20} />
+                </button>
+              </span>
+            ) : null}
             {secondLineAfterMarker}
           </span>
         </span>
