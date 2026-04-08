@@ -8,6 +8,7 @@ import LoadingGlyph from '../../components/ui/LoadingGlyph'
 import AboutDetailsSheet from '../../components/ui/AboutDetailsSheet'
 import OrderGuideSheet from '../../components/ui/OrderGuideSheet'
 import PromoBannerOverlay from '../../components/ui/PromoBannerOverlay'
+import PoizonManualChoiceHint from '../../components/ui/PoizonManualChoiceHint'
 import PoizonManualVariantButton from '../../components/ui/PoizonManualVariantButton'
 import ProductThumb from '../../components/ui/ProductThumb'
 import TextType from '../../components/ui/TextType'
@@ -47,9 +48,9 @@ import {
 } from '../../utils/promoBanners'
 import { getDeliverySettings } from '../../utils/deliveryPricing'
 import {
+  POIZON_MANUAL_OTHER_PLATFORM_PRICE_HELPER_TEXT,
   derivePersistedVariantSelection,
   POIZON_MANUAL_PRICE_HELPER_TEXT,
-  POIZON_MANUAL_VARIANT_HINT_TEXT,
   POIZON_MANUAL_VARIANT_SELECTIONS,
   shouldAllowFallbackVariantSelection,
   shouldRequireManualPriceForSelection,
@@ -3092,6 +3093,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     )
     const missingManualPrice = shouldShowManualPriceInput && !curPrice
     const shouldHideSummaryTotal = shouldShowManualPriceInput && displayPriceCny == null && curPriceRub == null && !result
+    const manualPriceHelperText = manualPoizonVariantChoice === 'right'
+      ? POIZON_MANUAL_OTHER_PLATFORM_PRICE_HELPER_TEXT
+      : POIZON_MANUAL_PRICE_HELPER_TEXT
     const summaryTotal = typeof result?.subtotal_rub === 'number'
       ? formatBuyerRub(result.subtotal_rub)
       : hasStartingPrice && displayPriceCny != null
@@ -3203,7 +3207,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               <div className="cp-manual">
                 <label className="cp-manual__label">
                   <span>
-                    {product.price_is_starting ? 'Укажите точную цену в юанях (¥)' : 'Введите цену в юанях (¥)'}, {POIZON_MANUAL_PRICE_HELPER_TEXT}
+                    {product.price_is_starting ? 'Укажите точную цену в юанях (¥)' : 'Введите цену в юанях (¥)'}, {manualPriceHelperText}
                   </span>
                 </label>
                 <input ref={manualPriceInputRef} className="cp-manual__input" type="number" inputMode="decimal"
@@ -3309,7 +3313,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
           ) : null}
 
           <div className="cp-variants cp-variants--manual-choice">
-            <p className="cp-variants__manual-hint">{POIZON_MANUAL_VARIANT_HINT_TEXT}</p>
+            <PoizonManualChoiceHint className="cp-variants__manual-hint" />
             <PoizonManualVariantButton
               activeChoice={manualPoizonVariantChoice}
               onSelect={(choice) => {

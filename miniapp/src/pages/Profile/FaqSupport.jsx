@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { fetchFaq } from '../../api/faq'
 import StateSurface from '../../components/ui/StateSurface'
@@ -12,6 +12,7 @@ import {
 } from '../../components/ui/Icons'
 import { BUYER_MOTION } from '../../constants/buyerMotion'
 import { useTelegram } from '../../hooks/useTelegram'
+import { consumePendingFaqRequest } from '../../utils/faqNavigation'
 import { normalizeAdminSupport, openAdminSupportChat } from '../../utils/support'
 import './FaqSupport.css'
 
@@ -87,6 +88,12 @@ export default function FaqSupport({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [expandedId, setExpandedId] = useState(0)
+  const expandedIdRef = useRef(0)
+  const itemRefs = useRef(new Map())
+
+  useEffect(() => {
+    expandedIdRef.current = expandedId
+  }, [expandedId])
 
   const resolvedSupport = useMemo(
     () => normalizeAdminSupport(supportLink),
@@ -101,12 +108,30 @@ export default function FaqSupport({
       const data = await fetchFaq()
       setPayload(data)
 
+      const requestedQuestionIndex = consumePendingFaqRequest()?.questionIndex || 0
+      const requestedItemId = Number(data?.items?.[requestedQuestionIndex - 1]?.id || 0)
+
       const firstItemId = Number(data?.items?.[0]?.id || 0)
-      setExpandedId((currentExpandedId) => (
-        currentExpandedId && data?.items?.some?.((item) => item.id === currentExpandedId)
-          ? currentExpandedId
+      const nextExpandedId = requestedItemId || (
+        expandedIdRef.current && data?.items?.some?.((item) => item.id === expandedIdRef.current)
+          ? expandedIdRef.current
           : firstItemId
-      ))
+      )
+
+      setExpandedId(nextExpandedId)
+
+      if (requestedItemId) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            itemRefs.current.get(requestedItemId)?.scrollIntoView({
+              behavior: prefersReducedMotion ? 'auto' : 'smooth',
+              block: 'start',
+              inline: 'nearest',
+            })
+          })
+        })
+      }
+
       setError(null)
     } catch (requestError) {
       setError(requestError)
@@ -114,7 +139,7 @@ export default function FaqSupport({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [prefersReducedMotion])
 
   useEffect(() => {
     if (!active) {
@@ -229,6 +254,13 @@ export default function FaqSupport({
                   <motion.article
                     key={item.id}
                     className={`faq-support__item card${isOpen ? ' faq-support__item--open' : ''}`}
+                    ref={(node) => {
+                      if (node) {
+                        itemRefs.current.set(item.id, node)
+                      } else {
+                        itemRefs.current.delete(item.id)
+                      }
+                    }}
                     initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ ...(prefersReducedMotion ? BUYER_MOTION.quick : BUYER_MOTION.standard), delay: index * 0.03 }}

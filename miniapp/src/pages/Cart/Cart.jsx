@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import BottomSheet from '../../components/ui/BottomSheet'
+import PoizonManualChoiceHint from '../../components/ui/PoizonManualChoiceHint'
 import PoizonManualVariantButton from '../../components/ui/PoizonManualVariantButton'
 import {
   IconCheck,
@@ -28,9 +29,9 @@ import { BUYER_STATUS_META } from '../../constants/buyerStatusMeta'
 import { useTelegram } from '../../hooks/useTelegram'
 import { proxyImageUrl } from '../../utils/media'
 import {
+  POIZON_MANUAL_OTHER_PLATFORM_PRICE_HELPER_TEXT,
   derivePersistedVariantSelection,
   POIZON_MANUAL_PRICE_HELPER_TEXT,
-  POIZON_MANUAL_VARIANT_HINT_TEXT,
   POIZON_MANUAL_VARIANT_SELECTIONS,
   shouldAllowFallbackVariantSelection,
   shouldRequireManualPriceForSelection,
@@ -307,6 +308,9 @@ export default function Cart({ active, guidePreview = null }) {
   const detailNeedsManualPriceInput = detailAllOptionsSelected && (
     detailManualPriceRequired || Boolean(detailProduct?.price_is_starting)
   )
+  const detailManualPriceHelperText = detailManualPoizonVariantChoice === 'right'
+    ? POIZON_MANUAL_OTHER_PLATFORM_PRICE_HELPER_TEXT
+    : POIZON_MANUAL_PRICE_HELPER_TEXT
 
   const detailGetFilteredEntries = useCallback(
     (groupIndex) => {
@@ -1217,7 +1221,7 @@ export default function Cart({ active, guidePreview = null }) {
                       </div>
                     ) : null}
                     <div className="cart-detail__manual-choice">
-                      <p className="cart-detail__manual-choice-hint">{POIZON_MANUAL_VARIANT_HINT_TEXT}</p>
+                      <PoizonManualChoiceHint className="cart-detail__manual-choice-hint" />
                       <PoizonManualVariantButton
                         activeChoice={detailManualPoizonVariantChoice}
                         onSelect={(choice) => {
@@ -1236,7 +1240,7 @@ export default function Cart({ active, guidePreview = null }) {
                           <span>
                             {detailProduct?.price_is_starting
                               ? 'Укажите точную цену в юанях (¥)'
-                              : 'Введите цену в юанях (¥)'}, {POIZON_MANUAL_PRICE_HELPER_TEXT}
+                              : 'Введите цену в юанях (¥)'}, {detailManualPriceHelperText}
                           </span>
                         </label>
                         <input

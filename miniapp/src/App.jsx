@@ -10,6 +10,7 @@ import Orders from './pages/Orders/Orders'
 import { bootstrapWithInitData } from './api/admin.js'
 import { useTelegram } from './hooks/useTelegram'
 import { useShellSwipeGuard } from './hooks/useShellSwipeGuard'
+import { OPEN_FAQ_REQUEST_EVENT } from './utils/faqNavigation'
 
 const TAB_ORDER_BASE = ['history', 'cart', 'calculator', 'profile', 'orders']
 const SHELL_TAB_SLIDE_DISTANCE = 24
@@ -182,6 +183,25 @@ export default function App() {
     }, 50)
   }, [activeTab, tabOrder])
 
+  useEffect(() => {
+    const handleOpenFaqRequest = () => {
+      const nextTab = 'profile'
+      const currentIndex = tabOrder.indexOf(activeTab)
+      const nextIndex = tabOrder.indexOf(nextTab)
+
+      if (currentIndex !== -1 && nextIndex !== -1 && currentIndex !== nextIndex) {
+        setTabDirection(nextIndex > currentIndex ? 1 : -1)
+      }
+
+      setProfileRequestedView('faq')
+      setActiveTab(nextTab)
+    }
+
+    window.addEventListener(OPEN_FAQ_REQUEST_EVENT, handleOpenFaqRequest)
+    return () => {
+      window.removeEventListener(OPEN_FAQ_REQUEST_EVENT, handleOpenFaqRequest)
+    }
+  }, [activeTab, tabOrder])
   const emitSwipeHaptic = useCallback(() => {
     window.requestAnimationFrame(() => {
       haptic?.('light')
