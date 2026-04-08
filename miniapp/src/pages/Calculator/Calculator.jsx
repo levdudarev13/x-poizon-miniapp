@@ -954,7 +954,16 @@ function buildShowcaseUpdatePayloadFromSlots(slots) {
 }
 
 const Calculator = forwardRef(function Calculator({ onCartChange, active = false }, ref) {
-  const { userId, firstName, haptic, hideKeyboard, initData, tg } = useTelegram()
+  const {
+    userId,
+    firstName,
+    haptic,
+    hideKeyboard,
+    initData,
+    tg,
+    isTelegramWebView,
+    isTelegramCompatibilityMode,
+  } = useTelegram()
   const prefersReducedMotion = useReducedMotion()
 
   const greeting = (() => {
@@ -1792,7 +1801,10 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const searchInputUrl = extractShowcaseInputUrl(searchInput)
   const canSubmitSearchInput = Boolean(searchInputText)
   const canSubmitNameSearch = Boolean(searchQuery.trim())
-  const showAnimatedSearchHint = !searchInputText && !searchInputFocused
+  const shouldShowSearchHint = !searchInputText && !searchInputFocused
+  const showAnimatedSearchHint = shouldShowSearchHint && !prefersReducedMotion
+  const showStaticSearchHint = shouldShowSearchHint && !showAnimatedSearchHint
+  const allowAnimatedIntro = active && !prefersReducedMotion && !isTelegramWebView
 
   /* ── auto-calculate when price changes ── */
   const calcKey = step === 'product' && product && curPrice
@@ -2364,7 +2376,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       <>
         <div ref={idlePageRef} className="calc-page buyer-page buyer-page--calculator">
         <div className="calc-page__ambient" aria-hidden="true">
-          {active && !prefersReducedMotion ? (
+          {allowAnimatedIntro ? (
             <LightRays
               className="calc-page__light-rays"
               raysOrigin="top-center"
@@ -2407,7 +2419,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             duration={900}
             delay={80}
             threshold={0.18}
-            enabled={active && !prefersReducedMotion}
+            enabled={allowAnimatedIntro}
           >
             <div className="calc-page__cta-stack">
               <div className="calc-page__input-spotlight-shell">
@@ -2433,6 +2445,10 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                   className="calc-page__input-text-type"
                   cursorClassName="calc-page__input-text-type-cursor"
                 />
+              </div>
+            ) : showStaticSearchHint ? (
+              <div className="calc-page__input-ghost" aria-hidden="true">
+                <span className="calc-page__input-text-type">{CALC_SEARCH_HINTS[0]}</span>
               </div>
             ) : null}
             <input
@@ -2500,7 +2516,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               duration={900}
               delay={180}
               threshold={0.18}
-              enabled={active && !prefersReducedMotion}
+              enabled={allowAnimatedIntro}
             >
               <div className="calc-page__input-wrap">
               <input
@@ -2959,14 +2975,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     const sizeSelected = !hasSizes || !!selSize
     const allOptionsSelected = allVariantsSelected && sizeSelected
     const hasSpecs = product.specs && Object.keys(product.specs).length > 0
-    const poizonVariantsUnavailable =
-      product.platform === 'poizon' &&
-      (product.url || '').includes('skuId=') &&
-      !!product.size &&
-      !hasVariants &&
-      !hasSizes &&
-      Object.keys(product.variant_price_map || {}).length === 0
-    const canAddToCart = !poizonVariantsUnavailable && !isInCart && !cartAdding && !calcLoading && !!result && allOptionsSelected
+    const canAddToCart = !isInCart && !cartAdding && !calcLoading && !!result && allOptionsSelected
     const waitingForExactPriceSelection = Boolean(product.price_is_starting && !allOptionsSelected)
     const hasExactPriceFromData = priceState.source === 'base' || priceState.source === 'variant'
     const shouldShowManualPriceInput = Boolean(
@@ -3006,12 +3015,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     }))
     const shouldShowOrderGuideStepFiveSizeTarget = shouldExposeOrderGuideStepFiveFocus
     const shouldShowOrderGuideStepFiveCtaTarget = shouldExposeOrderGuideStepFiveFocus
-      && !poizonVariantsUnavailable
       && !isInCart
       && !cartAdding
-    const ctaNote = poizonVariantsUnavailable
-      ? 'Этот вариант сейчас нельзя добавить в корзину.'
-      : waitingForExactPriceSelection
+    const ctaNote = waitingForExactPriceSelection
         ? 'Выберите все доступные варианты, затем укажите точную цену в юанях для расчёта.'
         : !allOptionsSelected && missingManualPrice
           ? 'Выберите все доступные варианты и укажите цену в юанях, чтобы добавить товар в корзину.'
@@ -3094,17 +3100,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               </div>
             )}
 
-            {poizonVariantsUnavailable && (
-              <div className="cp-availability-note card">
-                <div className="cp-availability-note__title">
-                  <IconStateAlert size={16} />
-                  <span>Доступных вариантов именно на Poizon сейчас нет</span>
-                </div>
-                <p className="cp-availability-note__text">
-                  {`Poizon вернул только выбранный вариант: ${product.size}. Другие размеры и уточнения сейчас недоступны, поэтому добавить товар в корзину нельзя.`}
-                </p>
-              </div>
-            )}
           </section>
 
           {/* ── variants ── */}
@@ -3281,8 +3276,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               <><span className="cp-actions__spinner" /> Добавляем</>
             ) : isInCart ? (
               <><IconCheck /> В корзине</>
-            ) : poizonVariantsUnavailable ? (
-              <><IconPlus /> Недоступно</>
             ) : (
               <><IconPlus /> В корзину</>
             )}
