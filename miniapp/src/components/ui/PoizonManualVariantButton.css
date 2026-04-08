@@ -35,6 +35,11 @@
   vertical-align: top;
 }
 
+.poizon-manual-choice--right .poizon-manual-choice__preview {
+  transform: scale(1.045);
+  transform-origin: center bottom;
+}
+
 .poizon-manual-choice__frames {
   position: absolute;
   top: 4px;
@@ -108,6 +113,9 @@
 .cp-variants__manual-hint,
 .cart-detail__manual-choice-hint {
   margin: 0;
+  max-width: none;
+  width: 100%;
+  white-space: pre-line;
 }
 
 .cp-variants--manual-choice {
