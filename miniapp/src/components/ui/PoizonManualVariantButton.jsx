@@ -9,11 +9,14 @@ const POIZON_BUTTON_FRAMES = [
   '/40404.png',
 ]
 
+const POIZON_BUTTON_OPTIONS = [
+  { id: 'left', src: '/5.png', alt: 'Poizon 5' },
+  { id: 'right', src: '/6.png', alt: 'Poizon 6' },
+]
+
 export default function PoizonManualVariantButton({
-  active = false,
-  onClick,
-  title = 'Как на Poizon',
-  caption = 'Цена вводится вручную',
+  activeChoice = '',
+  onSelect,
   className = '',
 }) {
   const prefersReducedMotion = useReducedMotion()
@@ -27,7 +30,7 @@ export default function PoizonManualVariantButton({
 
     const intervalId = window.setInterval(() => {
       setActiveFrameIndex((currentIndex) => (currentIndex + 1) % POIZON_BUTTON_FRAMES.length)
-    }, 850)
+    }, 500)
 
     return () => {
       window.clearInterval(intervalId)
@@ -35,27 +38,39 @@ export default function PoizonManualVariantButton({
   }, [prefersReducedMotion])
 
   return (
-    <button
-      type="button"
-      className={`poizon-manual-variant pressable${active ? ' is-active' : ''}${className ? ` ${className}` : ''}`}
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      <span className="poizon-manual-variant__eyebrow">Poizon</span>
-      <span className="poizon-manual-variant__title">{title}</span>
-      <span className="poizon-manual-variant__caption">{caption}</span>
-      <span className="poizon-manual-variant__symbol" aria-hidden="true">≈</span>
-      <span className="poizon-manual-variant__images" aria-hidden="true">
-        {POIZON_BUTTON_FRAMES.map((src, index) => (
-          <img
-            key={src}
-            src={src}
-            alt=""
-            className={`poizon-manual-variant__image${index === activeFrameIndex ? ' is-visible' : ''}`}
-            decoding="async"
-          />
-        ))}
-      </span>
-    </button>
+    <div className={`poizon-manual-choice-grid${className ? ` ${className}` : ''}`}>
+      {POIZON_BUTTON_OPTIONS.map((option) => {
+        const isActive = activeChoice === option.id
+        return (
+          <button
+            key={option.id}
+            type="button"
+            className={`poizon-manual-choice pressable${isActive ? ' is-active' : ''}`}
+            aria-pressed={isActive}
+            onClick={() => onSelect?.(option.id)}
+          >
+            {option.id === 'left' ? (
+              <span className="poizon-manual-choice__frames" aria-hidden="true">
+                {POIZON_BUTTON_FRAMES.map((src, index) => (
+                  <img
+                    key={src}
+                    src={src}
+                    alt=""
+                    className={`poizon-manual-choice__frame${index === activeFrameIndex ? ' is-visible' : ''}`}
+                    decoding="async"
+                  />
+                ))}
+              </span>
+            ) : null}
+            <img
+              src={option.src}
+              alt={option.alt}
+              className="poizon-manual-choice__preview"
+              decoding="async"
+            />
+          </button>
+        )
+      })}
+    </div>
   )
 }

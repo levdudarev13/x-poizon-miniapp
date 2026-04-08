@@ -50,7 +50,7 @@ import {
   derivePersistedVariantSelection,
   POIZON_MANUAL_PRICE_HELPER_TEXT,
   POIZON_MANUAL_VARIANT_HINT_TEXT,
-  POIZON_MANUAL_VARIANT_SELECTION_TEXT,
+  POIZON_MANUAL_VARIANT_SELECTIONS,
   shouldAllowFallbackVariantSelection,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
@@ -994,7 +994,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [activeImg, setActiveImg] = useState(0)
   const [selVariants, setSelVariants] = useState({})
   const [selSize, setSelSize] = useState('')
-  const [manualPoizonVariantSelected, setManualPoizonVariantSelected] = useState(false)
+  const [manualPoizonVariantChoice, setManualPoizonVariantChoice] = useState('')
   const [manualPrice, setManualPrice] = useState('')
   const [persistedSelectionBaseline, setPersistedSelectionBaseline] = useState(null)
   const fallbackSelectionResetKeyRef = useRef('')
@@ -1128,7 +1128,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants(restoredSelection.selectedVariants)
     setSelSize(restoredSelection.selectedSize)
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     setManualPrice('')
     setPersistedSelectionBaseline({
       calcId: persistedCalcId,
@@ -1153,7 +1153,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const resetOrderGuidePreviewSelectionState = useCallback(() => {
     setSelVariants({})
     setSelSize('')
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     setAddedToCart(false)
     addedCartUrlRef.current = null
     setPersistedSelectionBaseline(null)
@@ -1173,7 +1173,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants({})
     setSelSize('')
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     setManualPrice('')
     setPersistedSelectionBaseline(null)
     setSavedCalcId(null)
@@ -1316,7 +1316,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants({})
     setSelSize('')
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     setManualPrice('')
     setPersistedSelectionBaseline(null)
     setResult(null)
@@ -1676,8 +1676,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     ? [product.image_url, ...(product.extra_images || [])].filter(Boolean).map(proxyImageUrl)
     : []
 
-  const selectedOptionsText = manualPoizonVariantSelected
-    ? POIZON_MANUAL_VARIANT_SELECTION_TEXT
+  const selectedOptionsText = manualPoizonVariantChoice
+    ? POIZON_MANUAL_VARIANT_SELECTIONS[manualPoizonVariantChoice]
     : getSelectedOptionsText(product, selVariants, selSize)
   const pricingSourceProduct = product && persistedSelectionBaseline?.calcId && savedCalcId === persistedSelectionBaseline.calcId
     ? {
@@ -1686,7 +1686,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         size: persistedSelectionBaseline.size || product.size || '',
       }
     : product
-  const manualVariantPriceRequired = manualPoizonVariantSelected
+  const manualVariantPriceRequired = Boolean(manualPoizonVariantChoice)
     || shouldRequireManualPriceForSelection(pricingSourceProduct, selectedOptionsText)
   const priceStateProduct = manualVariantPriceRequired && pricingSourceProduct
     ? {
@@ -2000,7 +2000,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setActiveImg(0)
       setSelVariants({})
       setSelSize('')
-      setManualPoizonVariantSelected(false)
+      setManualPoizonVariantChoice('')
       setManualPrice('')
       setPersistedSelectionBaseline(null)
       setResult(null)
@@ -2175,7 +2175,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     skipNextAutoCalculateRef.current = false
     haptic?.('light')
     addedCartUrlRef.current = null
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     if ((step === 'product' || step === 'loading') && searchResults.length > 0) {
       setProduct(null)
       setPersistedSelectionBaseline(null)
@@ -2198,7 +2198,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const handleSearchHome = () => {
     haptic?.('light')
     setStep('idle')
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     setSearchError(null)
     setSearchResultOpenError(null)
     setSearchResults([])
@@ -2312,7 +2312,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants({})
     setSelSize('')
-    setManualPoizonVariantSelected(false)
+    setManualPoizonVariantChoice('')
     setManualPrice('')
     setPersistedSelectionBaseline(null)
     setResult(null)
@@ -3076,13 +3076,13 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     const shouldExposeOrderGuideStepFiveFocus = orderGuideOpen && orderGuideStep === 5
     const allVariantsSelected = variantGroups.every((g) => selVariants[g.name])
     const sizeSelected = !hasSizes || !canSelectStandaloneSizes || !!selSize
-    const allOptionsSelected = manualPoizonVariantSelected || (allVariantsSelected && sizeSelected)
+    const allOptionsSelected = Boolean(manualPoizonVariantChoice) || (allVariantsSelected && sizeSelected)
     const hasSpecs = product.specs && Object.keys(product.specs).length > 0
     const canAddToCart = !isInCart && !cartAdding && !calcLoading && !!result && allOptionsSelected
     const waitingForExactPriceSelection = Boolean((product.price_is_starting || manualVariantPriceRequired) && !allOptionsSelected)
     const hasExactPriceFromData = priceState.source === 'base' || priceState.source === 'variant'
     const shouldShowManualPriceInput = Boolean(
-      manualPoizonVariantSelected
+      manualPoizonVariantChoice
         ? true
         : manualVariantPriceRequired
         ? allOptionsSelected
@@ -3107,7 +3107,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         : formatBuyerCny(displayPriceCny)
       : null
     const supportPriceFallback = shouldShowManualPriceInput && displayPriceCny == null
-      ? manualPoizonVariantSelected
+      ? manualPoizonVariantChoice
         ? 'Цена появится после ручного ввода для кнопки Poizon'
         : 'Цена появится после ввода вручную'
       : 'Цена появится после выбора варианта'
@@ -3126,7 +3126,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     const shouldShowOrderGuideStepFiveCtaTarget = shouldExposeOrderGuideStepFiveFocus
       && !isInCart
       && !cartAdding
-    const ctaNote = manualPoizonVariantSelected && missingManualPrice
+    const ctaNote = manualPoizonVariantChoice && missingManualPrice
         ? 'Укажите цену в юанях для варианта с кнопкой Poizon, чтобы получить расчёт и добавить товар в корзину.'
         : waitingForExactPriceSelection
         ? 'Выберите все доступные варианты, затем укажите точную цену в юанях для расчёта.'
@@ -3245,7 +3245,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                                 setAddedToCart(false)
                                 addedCartUrlRef.current = null
                                 setSavedCalcId(null)
-                                setManualPoizonVariantSelected(false)
+                                setManualPoizonVariantChoice('')
                                 setManualPrice('')
                                 setSelVariants((p) => {
                                   if (p[group.name] === name) {
@@ -3293,7 +3293,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                             setAddedToCart(false)
                             addedCartUrlRef.current = null
                             setSavedCalcId(null)
-                            setManualPoizonVariantSelected(false)
+                            setManualPoizonVariantChoice('')
                             setManualPrice('')
                             setSelSize((p) => (p === name ? '' : name))
                           }}>
@@ -3310,8 +3310,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
           <div className="cp-variants cp-variants--manual-choice">
             <p className="cp-variants__manual-hint">{POIZON_MANUAL_VARIANT_HINT_TEXT}</p>
             <PoizonManualVariantButton
-              active={manualPoizonVariantSelected}
-              onClick={() => {
+              activeChoice={manualPoizonVariantChoice}
+              onSelect={(choice) => {
                 haptic?.('light')
                 setAddedToCart(false)
                 addedCartUrlRef.current = null
@@ -3319,8 +3319,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                 setManualPrice('')
                 setSelVariants({})
                 setSelSize('')
-                pendingManualPriceScrollRef.current = !manualPoizonVariantSelected
-                setManualPoizonVariantSelected((currentValue) => !currentValue)
+                pendingManualPriceScrollRef.current = choice !== manualPoizonVariantChoice
+                setManualPoizonVariantChoice((currentValue) => (currentValue === choice ? '' : choice))
               }}
             />
           </div>

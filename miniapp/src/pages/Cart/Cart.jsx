@@ -31,7 +31,7 @@ import {
   derivePersistedVariantSelection,
   POIZON_MANUAL_PRICE_HELPER_TEXT,
   POIZON_MANUAL_VARIANT_HINT_TEXT,
-  POIZON_MANUAL_VARIANT_SELECTION_TEXT,
+  POIZON_MANUAL_VARIANT_SELECTIONS,
   shouldAllowFallbackVariantSelection,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
@@ -115,7 +115,7 @@ export default function Cart({ active, guidePreview = null }) {
   const [detailVariantsOpen, setDetailVariantsOpen] = useState(false)
   const [detailSelVariants, setDetailSelVariants] = useState({})
   const [detailSelSize, setDetailSelSize] = useState('')
-  const [detailManualPoizonVariantSelected, setDetailManualPoizonVariantSelected] = useState(false)
+  const [detailManualPoizonVariantChoice, setDetailManualPoizonVariantChoice] = useState('')
   const [detailManualPrice, setDetailManualPrice] = useState('')
   const [detailRecalcLoading, setDetailRecalcLoading] = useState(false)
   const detailTouchX = useRef(null)
@@ -250,7 +250,7 @@ export default function Cart({ active, guidePreview = null }) {
     setDetailVariantsOpen(false)
     setDetailSelVariants({})
     setDetailSelSize('')
-    setDetailManualPoizonVariantSelected(false)
+    setDetailManualPoizonVariantChoice('')
     setDetailManualPrice('')
     detailSelectionResetKeyRef.current = ''
     try {
@@ -275,7 +275,7 @@ export default function Cart({ active, guidePreview = null }) {
     setDetailError(false)
     setDetailSelVariants({})
     setDetailSelSize('')
-    setDetailManualPoizonVariantSelected(false)
+    setDetailManualPoizonVariantChoice('')
     setDetailManualPrice('')
     detailSelectionResetKeyRef.current = ''
   }
@@ -291,18 +291,18 @@ export default function Cart({ active, guidePreview = null }) {
   const detailCanSelectStandaloneSizes = !detailHasSizes || shouldAllowFallbackVariantSelection(detailProduct)
   const detailHasVariants = detailVariantGroups.length > 0 || detailHasSizes
   const detailAllVariantsSelected = detailVariantGroups.every((group) => detailSelVariants[group.name])
-  const detailAllOptionsSelected = detailManualPoizonVariantSelected || (
+  const detailAllOptionsSelected = Boolean(detailManualPoizonVariantChoice) || (
     detailAllVariantsSelected && (!detailHasSizes || !detailCanSelectStandaloneSizes || Boolean(detailSelSize))
   )
-  const detailSelectedOptionsText = detailManualPoizonVariantSelected
-    ? POIZON_MANUAL_VARIANT_SELECTION_TEXT
+  const detailSelectedOptionsText = detailManualPoizonVariantChoice
+    ? POIZON_MANUAL_VARIANT_SELECTIONS[detailManualPoizonVariantChoice]
     : [
       ...detailVariantGroups.map((group) => detailSelVariants[group.name]).filter(Boolean),
       ...(detailHasSizes && detailSelSize ? [detailSelSize] : []),
     ].join(' / ')
   const detailSavedSizeText = String(detailProduct?.size || detailItem?.size || '').trim()
   const detailSizeText = detailSelectedOptionsText || detailSavedSizeText
-  const detailManualPriceRequired = detailManualPoizonVariantSelected
+  const detailManualPriceRequired = Boolean(detailManualPoizonVariantChoice)
     || shouldRequireManualPriceForSelection(detailProduct, detailSelectedOptionsText)
   const detailNeedsManualPriceInput = detailAllOptionsSelected && (
     detailManualPriceRequired || Boolean(detailProduct?.price_is_starting)
@@ -401,7 +401,7 @@ export default function Cart({ active, guidePreview = null }) {
     const restoredSelection = derivePersistedVariantSelection(detailData.product)
     setDetailSelVariants(restoredSelection.selectedVariants)
     setDetailSelSize(restoredSelection.selectedSize)
-    setDetailManualPoizonVariantSelected(false)
+    setDetailManualPoizonVariantChoice('')
     setDetailManualPrice('')
     detailSelectionResetKeyRef.current = ''
     return
@@ -1162,7 +1162,7 @@ export default function Cart({ active, guidePreview = null }) {
                                   onClick={() => {
                                     if (!avail) return
                                     haptic?.('light')
-                                    setDetailManualPoizonVariantSelected(false)
+                                    setDetailManualPoizonVariantChoice('')
                                     setDetailManualPrice('')
                                     setDetailSelVariants((p) => {
                                       if (p[group.name] === name) {
@@ -1204,7 +1204,7 @@ export default function Cart({ active, guidePreview = null }) {
                                 onClick={() => {
                                   if (!detailCanSelectStandaloneSizes) return
                                   haptic?.('light')
-                                  setDetailManualPoizonVariantSelected(false)
+                                  setDetailManualPoizonVariantChoice('')
                                   setDetailManualPrice('')
                                   setDetailSelSize((p) => (p === name ? '' : name))
                                 }}
@@ -1219,14 +1219,14 @@ export default function Cart({ active, guidePreview = null }) {
                     <div className="cart-detail__manual-choice">
                       <p className="cart-detail__manual-choice-hint">{POIZON_MANUAL_VARIANT_HINT_TEXT}</p>
                       <PoizonManualVariantButton
-                        active={detailManualPoizonVariantSelected}
-                        onClick={() => {
+                        activeChoice={detailManualPoizonVariantChoice}
+                        onSelect={(choice) => {
                           haptic?.('light')
                           setDetailManualPrice('')
                           setDetailSelVariants({})
                           setDetailSelSize('')
-                          pendingDetailManualScrollRef.current = !detailManualPoizonVariantSelected
-                          setDetailManualPoizonVariantSelected((currentValue) => !currentValue)
+                          pendingDetailManualScrollRef.current = choice !== detailManualPoizonVariantChoice
+                          setDetailManualPoizonVariantChoice((currentValue) => (currentValue === choice ? '' : choice))
                         }}
                       />
                     </div>
