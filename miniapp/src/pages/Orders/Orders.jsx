@@ -592,6 +592,7 @@ export default function Orders({
   const regionalDelivery = deliveryCity ? !isMoscowDeliveryCity(deliveryCity) : false
   const activeDeliveryTitle = normalizedDeliveryType === EXPRESS_DELIVERY_TYPE ? 'Экспресс доставка' : 'Обычная доставка'
   const activeDeliveryDays = normalizedDeliveryType === EXPRESS_DELIVERY_TYPE ? deliveryInfo.express_days : deliveryInfo.standard_days
+  const regionalDeliveryDays = deliveryInfo.cdek_days || 'Срок уточняется'
   const deliveryDetails = [
     'В стоимость доставки входят облицовка и страховка.',
     'Доставка оплачивается при получении.',
@@ -828,8 +829,8 @@ export default function Orders({
 
                   {regionalDelivery ? (
                     <div className="ord-delivery__route">
-                      <span className="ord-delivery__route-label">СДЭК по России</span>
-                      <span className="ord-delivery__route-value">{deliveryInfo.cdek_days || 'Срок уточняется'}</span>
+                      <span className="ord-delivery__route-label">СДЭК по России со скидкой до 70%</span>
+                      <span className="ord-delivery__route-value">за счет корпоративного контракта в течение {regionalDeliveryDays}</span>
                     </div>
                   ) : null}
 
