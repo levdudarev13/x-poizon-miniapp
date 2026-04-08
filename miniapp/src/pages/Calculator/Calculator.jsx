@@ -1978,6 +1978,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setAddedToCart(false)
       addedCartUrlRef.current = null
       setSpecsOpen(false)
+      setSearchInput('')
       setStep('product')
       if (withHaptic) {
         haptic?.('light')
@@ -2035,6 +2036,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setSearchRate(d.rate_cny_rub)
       setSearchNextStartId(nextStartId)
       setSearchHasMore(hasMore)
+      setSearchInput('')
       setSearchLoading(false)
       setStep('search-results')
       haptic?.('success')
