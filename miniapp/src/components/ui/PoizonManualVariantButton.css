@@ -130,21 +130,27 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+}
+
+.poizon-manual-choice-hint__line-copy {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
 }
 
 .poizon-manual-choice-hint__faq-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: inherit;
-  transform: translate3d(0, 1px, 0);
+  transform: translate3d(0, 2px, 0);
   animation: poizon-manual-choice-hint-glow 2.2s ease-in-out infinite;
 }
 

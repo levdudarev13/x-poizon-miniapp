@@ -14,6 +14,14 @@ export default function PoizonManualChoiceHint({
     .filter(Boolean)
 
   const [firstLine = '', secondLine = ''] = hintLines
+  const questionMarker = '95'
+  const questionMarkerIndex = secondLine.lastIndexOf(questionMarker)
+  const secondLineBeforeMarker = questionMarkerIndex >= 0
+    ? secondLine.slice(0, questionMarkerIndex + questionMarker.length)
+    : secondLine
+  const secondLineAfterMarker = questionMarkerIndex >= 0
+    ? secondLine.slice(questionMarkerIndex + questionMarker.length)
+    : ''
 
   const handleOpenFaq = (event) => {
     event.preventDefault()
@@ -29,15 +37,18 @@ export default function PoizonManualChoiceHint({
       ) : null}
       {secondLine ? (
         <span className="poizon-manual-choice-hint__line">
-          <span>{secondLine}</span>
-          <button
-            type="button"
-            className="poizon-manual-choice-hint__faq-button pressable"
-            aria-label="Открыть FAQ и 4 вопрос"
-            onClick={handleOpenFaq}
-          >
-            <IconQuestion size={15} />
-          </button>
+          <span className="poizon-manual-choice-hint__line-copy">
+            {secondLineBeforeMarker}
+            <button
+              type="button"
+              className="poizon-manual-choice-hint__faq-button pressable"
+              aria-label="Открыть FAQ и 4 вопрос"
+              onClick={handleOpenFaq}
+            >
+              <IconQuestion size={18} />
+            </button>
+            {secondLineAfterMarker}
+          </span>
         </span>
       ) : null}
     </p>

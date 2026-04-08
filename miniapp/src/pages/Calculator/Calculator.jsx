@@ -1934,7 +1934,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
               priceCny: curPrice,
               size: String(selectedOptionsText || '').trim(),
             })
-            setManualPrice('')
           }
         }
         setCalcLoading(false)

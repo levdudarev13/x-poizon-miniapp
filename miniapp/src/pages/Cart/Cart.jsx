@@ -562,7 +562,6 @@ export default function Cart({ active, guidePreview = null }) {
           i.id === item.id ? { ...i, size: detailSizeText, subtotal_rub: resp.subtotal_rub } : i
         ))
         setDetailItem(prev => prev ? { ...prev, size: detailSizeText } : prev)
-        setDetailManualPrice('')
       } catch {
         // silent
       } finally {
