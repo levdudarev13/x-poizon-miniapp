@@ -12,6 +12,7 @@ from config import RAPIDAPI_FALLBACK_HOST, RAPIDAPI_HOST, rapidapi_quota_period
 from services.rapidapi_keys import get_rapidapi_keys, rotate_rapidapi_key_to_end
 
 log = logging.getLogger(__name__)
+POIZON_PROVIDER_PRICE_OFFSET_CNY = 2.0
 
 
 def _to_float(value: Any) -> float | None:
@@ -24,6 +25,12 @@ def _to_float(value: Any) -> float | None:
         if cleaned.isdigit():
             return float(cleaned)
     return None
+
+
+def _apply_provider_price_offset(price: float | None) -> float | None:
+    if price is None:
+        return None
+    return round(float(price) + POIZON_PROVIDER_PRICE_OFFSET_CNY, 2)
 
 
 def _pick_price(data: dict[str, Any]) -> float | None:
@@ -50,13 +57,13 @@ def _pick_price(data: dict[str, Any]) -> float | None:
     for candidate in direct_candidates:
         price = _to_float(candidate)
         if price and 10 <= price <= 50000:
-            return price
+            return _apply_provider_price_offset(price)
     for candidate in scaled_candidates:
         price = _to_float(candidate)
         if price and 1000 <= price <= 5_000_000:
             normalized = price / 100
             if 10 <= normalized <= 50000:
-                return normalized
+                return _apply_provider_price_offset(normalized)
     return None
 
 
@@ -77,7 +84,7 @@ def _extract_sku_price(item: dict[str, Any]) -> float | None:
     if min_bid and 1000 <= min_bid <= 5_000_000:
         normalized = min_bid / 100
         if 10 <= normalized <= 50000:
-            return normalized
+            return _apply_provider_price_offset(normalized)
     return _pick_price({"skuList": [item], "authPrice": None})
 
 
@@ -476,7 +483,7 @@ async def fetch_product_detail(
         if selected_min_bid and 1000 <= selected_min_bid <= 5_000_000:
             normalized = selected_min_bid / 100
             if 10 <= normalized <= 50000:
-                price = normalized
+                price = _apply_provider_price_offset(normalized)
         if price is None:
             selected_data = dict(data)
             selected_data["skuList"] = [selected_sku]

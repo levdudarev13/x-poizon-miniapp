@@ -209,7 +209,74 @@ class RapidApiRotationTests(unittest.TestCase):
 
                 self.assertEqual(last_id, 21)
                 self.assertEqual(len(results), 1)
-                self.assertEqual(results[0]["price_cny"], 159.0)
+                self.assertEqual(results[0]["price_cny"], 161.0)
+
+    def test_poizon_keyword_search_adds_offset_to_variant_prices(self) -> None:
+        request = httpx.Request("GET", "https://open-poizon-api.p.rapidapi.com/poizon/product/queryList")
+        client = AsyncMock()
+        client.get = AsyncMock(
+            return_value=httpx.Response(
+                200,
+                request=request,
+                json={
+                    "data": {
+                        "lastId": 31,
+                        "spuList": [
+                            {
+                                "dwSpuId": "variant-offset-test",
+                                "distSpuTitle": "Nike Hoodie",
+                                "image": "https://cdn.example.com/hoodie.jpg",
+                                "skuList": [
+                                    {
+                                        "minBidPrice": 12900,
+                                        "saleAttr": [
+                                            {"enName": "Color", "enValue": "Black", "level": 1},
+                                            {"enName": "Size", "enValue": "M", "level": 2},
+                                        ],
+                                    },
+                                    {
+                                        "minBidPrice": 14900,
+                                        "saleAttr": [
+                                            {"enName": "Color", "enValue": "Black", "level": 1},
+                                            {"enName": "Size", "enValue": "L", "level": 2},
+                                        ],
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                },
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text("RAPIDAPI_KEYS=pk1\n", encoding="utf-8")
+
+            with patch.dict(
+                os.environ,
+                {
+                    "RAPIDAPI_KEYS": "pk1",
+                    "RAPIDAPI_KEY": "",
+                    "RAPIDAPI_FALLBACK_KEYS": "",
+                },
+                clear=False,
+            ), patch(
+                "services.rapidapi_keys.ENV_FILE_PATH",
+                env_path,
+            ):
+                reset_rapidapi_key_cache()
+                results, last_id = asyncio.run(fetch_keyword_search(client, "Nike Hoodie"))
+
+                self.assertEqual(last_id, 31)
+                self.assertEqual(results[0]["price_cny"], 131.0)
+                self.assertEqual(
+                    results[0]["variant_price_map"],
+                    {
+                        '[["Size", "M"]]': 131.0,
+                        '[["Size", "L"]]': 151.0,
+                    },
+                )
 
     def test_poizon_keyword_search_falls_back_to_last_spu_id_when_cursor_missing(self) -> None:
         request = httpx.Request("GET", "https://open-poizon-api.p.rapidapi.com/poizon/product/queryList")
@@ -310,6 +377,69 @@ class RapidApiRotationTests(unittest.TestCase):
 
                 self.assertEqual(payload, {})
                 self.assertEqual(client.get.await_count, expected_calls)
+
+    def test_poizon_product_detail_adds_offset_to_selected_sku_and_variant_map(self) -> None:
+        request = httpx.Request("GET", "https://open-poizon-api.p.rapidapi.com/poizon/product/queryDetail")
+        client = AsyncMock()
+        client.get = AsyncMock(
+            return_value=httpx.Response(
+                200,
+                request=request,
+                json={
+                    "data": {
+                        "distSpuTitle": "Nike Air Force 1",
+                        "image": "https://cdn.example.com/af1.jpg",
+                        "skuList": [
+                            {
+                                "dwSkuId": "111",
+                                "minBidPrice": 19900,
+                                "saleAttr": [
+                                    {"enName": "Color", "enValue": "White", "level": 1},
+                                    {"enName": "Size", "enValue": "40", "level": 2},
+                                ],
+                            },
+                            {
+                                "dwSkuId": "222",
+                                "minBidPrice": 21900,
+                                "saleAttr": [
+                                    {"enName": "Color", "enValue": "White", "level": 1},
+                                    {"enName": "Size", "enValue": "41", "level": 2},
+                                ],
+                            },
+                        ],
+                    }
+                },
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env"
+            env_path.write_text("RAPIDAPI_KEYS=pk1\n", encoding="utf-8")
+
+            with patch.dict(
+                os.environ,
+                {
+                    "RAPIDAPI_KEYS": "pk1",
+                    "RAPIDAPI_KEY": "",
+                    "RAPIDAPI_FALLBACK_KEYS": "",
+                },
+                clear=False,
+            ), patch(
+                "services.rapidapi_keys.ENV_FILE_PATH",
+                env_path,
+            ):
+                reset_rapidapi_key_cache()
+                payload = asyncio.run(fetch_product_detail(client, "123", sku_id="111"))
+
+                self.assertEqual(payload["price"], 201.0)
+                self.assertEqual(payload["selected_variant"], "White / 40")
+                self.assertEqual(
+                    payload["variant_price_map"],
+                    {
+                        '[["Size", "40"]]': 201.0,
+                        '[["Size", "41"]]': 221.0,
+                    },
+                )
 
     def test_taobao_request_rotates_key_after_429(self) -> None:
         class FakeClient:
