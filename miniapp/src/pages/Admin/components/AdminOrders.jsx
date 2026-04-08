@@ -126,9 +126,9 @@ function AdminPoizonVariantNote({ meta }) {
       <div className="admin-order-item__poizon-line admin-order-item__poizon-line--primary">
         <span className="admin-order-item__poizon-title">{meta.title}</span>
         <span className="admin-order-item__poizon-badge-wrap">
-          <span>(</span>
+          <span className="admin-order-item__poizon-bracket">(</span>
           <AdminPoizonVariantBadge badgeType={meta.badgeType} />
-          <span>)</span>
+          <span className="admin-order-item__poizon-bracket admin-order-item__poizon-bracket--closing">)</span>
         </span>
       </div>
       <div className="admin-order-item__poizon-line admin-order-item__poizon-line--secondary">
