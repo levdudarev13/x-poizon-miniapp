@@ -8,6 +8,7 @@ import LoadingGlyph from '../../components/ui/LoadingGlyph'
 import AboutDetailsSheet from '../../components/ui/AboutDetailsSheet'
 import OrderGuideSheet from '../../components/ui/OrderGuideSheet'
 import PromoBannerOverlay from '../../components/ui/PromoBannerOverlay'
+import PoizonManualVariantButton from '../../components/ui/PoizonManualVariantButton'
 import ProductThumb from '../../components/ui/ProductThumb'
 import TextType from '../../components/ui/TextType'
 import BrandGemIcon from '../../components/ui/BrandGemIcon'
@@ -47,6 +48,9 @@ import {
 import { getDeliverySettings } from '../../utils/deliveryPricing'
 import {
   derivePersistedVariantSelection,
+  POIZON_MANUAL_PRICE_HELPER_TEXT,
+  POIZON_MANUAL_VARIANT_HINT_TEXT,
+  POIZON_MANUAL_VARIANT_SELECTION_TEXT,
   shouldAllowFallbackVariantSelection,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
@@ -990,6 +994,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [activeImg, setActiveImg] = useState(0)
   const [selVariants, setSelVariants] = useState({})
   const [selSize, setSelSize] = useState('')
+  const [manualPoizonVariantSelected, setManualPoizonVariantSelected] = useState(false)
   const [manualPrice, setManualPrice] = useState('')
   const [persistedSelectionBaseline, setPersistedSelectionBaseline] = useState(null)
   const fallbackSelectionResetKeyRef = useRef('')
@@ -1001,6 +1006,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const addToCartSuccessRef = useRef(null)
   const idlePageRef = useRef(null)
   const productScrollRef = useRef(null)
+  const manualPriceInputRef = useRef(null)
+  const pendingManualPriceScrollRef = useRef(false)
   const orderGuideAutoScrollFrameRef = useRef(0)
   const [loadingMode, setLoadingMode] = useState('product')
   const [loadingText, setLoadingText] = useState('')
@@ -1121,6 +1128,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants(restoredSelection.selectedVariants)
     setSelSize(restoredSelection.selectedSize)
+    setManualPoizonVariantSelected(false)
     setManualPrice('')
     setPersistedSelectionBaseline({
       calcId: persistedCalcId,
@@ -1145,6 +1153,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const resetOrderGuidePreviewSelectionState = useCallback(() => {
     setSelVariants({})
     setSelSize('')
+    setManualPoizonVariantSelected(false)
     setAddedToCart(false)
     addedCartUrlRef.current = null
     setPersistedSelectionBaseline(null)
@@ -1164,6 +1173,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants({})
     setSelSize('')
+    setManualPoizonVariantSelected(false)
     setManualPrice('')
     setPersistedSelectionBaseline(null)
     setSavedCalcId(null)
@@ -1306,6 +1316,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants({})
     setSelSize('')
+    setManualPoizonVariantSelected(false)
     setManualPrice('')
     setPersistedSelectionBaseline(null)
     setResult(null)
@@ -1665,7 +1676,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     ? [product.image_url, ...(product.extra_images || [])].filter(Boolean).map(proxyImageUrl)
     : []
 
-  const selectedOptionsText = getSelectedOptionsText(product, selVariants, selSize)
+  const selectedOptionsText = manualPoizonVariantSelected
+    ? POIZON_MANUAL_VARIANT_SELECTION_TEXT
+    : getSelectedOptionsText(product, selVariants, selSize)
   const pricingSourceProduct = product && persistedSelectionBaseline?.calcId && savedCalcId === persistedSelectionBaseline.calcId
     ? {
         ...product,
@@ -1673,7 +1686,8 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         size: persistedSelectionBaseline.size || product.size || '',
       }
     : product
-  const manualVariantPriceRequired = shouldRequireManualPriceForSelection(pricingSourceProduct, selectedOptionsText)
+  const manualVariantPriceRequired = manualPoizonVariantSelected
+    || shouldRequireManualPriceForSelection(pricingSourceProduct, selectedOptionsText)
   const priceStateProduct = manualVariantPriceRequired && pricingSourceProduct
     ? {
         ...pricingSourceProduct,
@@ -1860,6 +1874,21 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     fallbackSelectionResetKeyRef.current = selectionResetKey
   }, [pricingSourceProduct, savedCalcId, selectedOptionsText])
 
+  useEffect(() => {
+    if (!pendingManualPriceScrollRef.current || !manualPriceInputRef.current) {
+      return
+    }
+
+    pendingManualPriceScrollRef.current = false
+    window.requestAnimationFrame(() => {
+      manualPriceInputRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'center',
+        inline: 'nearest',
+      })
+    })
+  }, [prefersReducedMotion, selectedOptionsText])
+
   /* ── auto-calculate when price changes ── */
   const calcKey = step === 'product' && product && curPrice
     ? `${product.url}:${curPrice}:${selectedOptionsText}`
@@ -1971,6 +2000,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setActiveImg(0)
       setSelVariants({})
       setSelSize('')
+      setManualPoizonVariantSelected(false)
       setManualPrice('')
       setPersistedSelectionBaseline(null)
       setResult(null)
@@ -2145,6 +2175,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     skipNextAutoCalculateRef.current = false
     haptic?.('light')
     addedCartUrlRef.current = null
+    setManualPoizonVariantSelected(false)
     if ((step === 'product' || step === 'loading') && searchResults.length > 0) {
       setProduct(null)
       setPersistedSelectionBaseline(null)
@@ -2167,6 +2198,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const handleSearchHome = () => {
     haptic?.('light')
     setStep('idle')
+    setManualPoizonVariantSelected(false)
     setSearchError(null)
     setSearchResultOpenError(null)
     setSearchResults([])
@@ -2280,6 +2312,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     setActiveImg(0)
     setSelVariants({})
     setSelSize('')
+    setManualPoizonVariantSelected(false)
     setManualPrice('')
     setPersistedSelectionBaseline(null)
     setResult(null)
@@ -3039,16 +3072,19 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     const hasSizes = !variantHasSizes && (product.available_sizes || []).length >= 2
     const canSelectStandaloneSizes = !hasSizes || shouldAllowFallbackVariantSelection(product)
     const variantGroups = (product.variants || []).filter((g) => (g.options || []).length >= 2)
+    const showVariantControls = hasVariants || hasSizes
     const shouldExposeOrderGuideStepFiveFocus = orderGuideOpen && orderGuideStep === 5
     const allVariantsSelected = variantGroups.every((g) => selVariants[g.name])
     const sizeSelected = !hasSizes || !canSelectStandaloneSizes || !!selSize
-    const allOptionsSelected = allVariantsSelected && sizeSelected
+    const allOptionsSelected = manualPoizonVariantSelected || (allVariantsSelected && sizeSelected)
     const hasSpecs = product.specs && Object.keys(product.specs).length > 0
     const canAddToCart = !isInCart && !cartAdding && !calcLoading && !!result && allOptionsSelected
     const waitingForExactPriceSelection = Boolean((product.price_is_starting || manualVariantPriceRequired) && !allOptionsSelected)
     const hasExactPriceFromData = priceState.source === 'base' || priceState.source === 'variant'
     const shouldShowManualPriceInput = Boolean(
-      manualVariantPriceRequired
+      manualPoizonVariantSelected
+        ? true
+        : manualVariantPriceRequired
         ? allOptionsSelected
         : !hasExactPriceFromData && (
         product.price_cny == null || (product.price_is_starting && allOptionsSelected)
@@ -3071,7 +3107,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
         : formatBuyerCny(displayPriceCny)
       : null
     const supportPriceFallback = shouldShowManualPriceInput && displayPriceCny == null
-      ? 'Цена появится после ввода вручную'
+      ? manualPoizonVariantSelected
+        ? 'Цена появится после ручного ввода для кнопки Poizon'
+        : 'Цена появится после ввода вручную'
       : 'Цена появится после выбора варианта'
     const needsExactPrice = Boolean(hasStartingPrice && !curPrice)
     const breakdownRows = (result?.breakdown || []).map((row, index) => ({
@@ -3088,7 +3126,9 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     const shouldShowOrderGuideStepFiveCtaTarget = shouldExposeOrderGuideStepFiveFocus
       && !isInCart
       && !cartAdding
-    const ctaNote = waitingForExactPriceSelection
+    const ctaNote = manualPoizonVariantSelected && missingManualPrice
+        ? 'Укажите цену в юанях для варианта с кнопкой Poizon, чтобы получить расчёт и добавить товар в корзину.'
+        : waitingForExactPriceSelection
         ? 'Выберите все доступные варианты, затем укажите точную цену в юанях для расчёта.'
         : !allOptionsSelected && missingManualPrice
           ? 'Выберите все доступные варианты и укажите цену в юанях, чтобы добавить товар в корзину.'
@@ -3162,9 +3202,10 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
             {shouldShowManualPriceInput && (
               <div className="cp-manual">
                 <label className="cp-manual__label">
-                  {product.price_is_starting ? 'Укажите точную цену в юанях (¥)' : 'Введите цену в юанях (¥)'}
+                  <span>{product.price_is_starting ? 'Укажите точную цену в юанях (¥)' : 'Введите цену в юанях (¥)'}</span>
+                  <span className="cp-manual__label-copy">{POIZON_MANUAL_PRICE_HELPER_TEXT}</span>
                 </label>
-                <input className="cp-manual__input" type="number" inputMode="decimal"
+                <input ref={manualPriceInputRef} className="cp-manual__input" type="number" inputMode="decimal"
                   placeholder={product.price_is_starting ? 'например 1500 для выбранного варианта' : 'например 1500'}
                   value={manualPrice}
                   onChange={(e) => setManualPrice(e.target.value)} />
@@ -3173,96 +3214,116 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
           </section>
 
-          {/* ── variants ── */}
-          {hasVariants && (
+          {showVariantControls ? (
             <div className="cp-variants">
-              {(product.variants || []).map((group, gi) => {
-                const opts = group.options || []
-                if (opts.length < 2) return null
-                const isSizeVariantGroup = SIZE_GROUP_NAMES.includes(String(group?.name || '').trim().toLowerCase())
-                return (
-                  <div key={group.name} className="cv-group">
-                    <div className="cv-group__label">{group.name}</div>
-                    <div className="cv-group__list">
-                      {opts.map((raw) => {
-                        const name = typeof raw === 'string' ? raw : raw.name || String(raw)
-                        const active = selVariants[group.name] === name
-                        const avail = isOptionAvailable(group.name, name, gi)
-                        const mp = avail ? getOptionPrice(group.name, name, gi) : null
-                        const shouldHighlightStepFiveFocus = shouldShowOrderGuideStepFiveSizeTarget
-                          && isSizeVariantGroup
-                          && matchesOrderGuidePreferredSize(name)
-                          && avail
-                        return (
-                          <button key={name}
-                            className={`cv-chip pressable${active ? ' active' : ''}${!avail ? ' disabled' : ''}${mp != null ? ' has-price' : ''}`}
-                            data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
-                            disabled={!avail}
-                            onClick={() => {
-                              if (!avail) return
-                              haptic?.('light')
-                              setAddedToCart(false)
-                              addedCartUrlRef.current = null
-                              setSavedCalcId(null)
-                              setSelVariants((p) => {
-                                if (p[group.name] === name) {
-                                  const next = { ...p }
-                                  delete next[group.name]
-                                  return next
-                                }
+              {hasVariants ? (
+                (product.variants || []).map((group, gi) => {
+                  const opts = group.options || []
+                  if (opts.length < 2) return null
+                  const isSizeVariantGroup = SIZE_GROUP_NAMES.includes(String(group?.name || '').trim().toLowerCase())
+                  return (
+                    <div key={group.name} className="cv-group">
+                      <div className="cv-group__label">{group.name}</div>
+                      <div className="cv-group__list">
+                        {opts.map((raw) => {
+                          const name = typeof raw === 'string' ? raw : raw.name || String(raw)
+                          const active = selVariants[group.name] === name
+                          const avail = isOptionAvailable(group.name, name, gi)
+                          const mp = avail ? getOptionPrice(group.name, name, gi) : null
+                          const shouldHighlightStepFiveFocus = shouldShowOrderGuideStepFiveSizeTarget
+                            && isSizeVariantGroup
+                            && matchesOrderGuidePreferredSize(name)
+                            && avail
+                          return (
+                            <button key={name}
+                              className={`cv-chip pressable${active ? ' active' : ''}${!avail ? ' disabled' : ''}${mp != null ? ' has-price' : ''}`}
+                              data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
+                              disabled={!avail}
+                              onClick={() => {
+                                if (!avail) return
+                                haptic?.('light')
+                                setAddedToCart(false)
+                                addedCartUrlRef.current = null
+                                setSavedCalcId(null)
+                                setManualPoizonVariantSelected(false)
+                                setManualPrice('')
+                                setSelVariants((p) => {
+                                  if (p[group.name] === name) {
+                                    const next = { ...p }
+                                    delete next[group.name]
+                                    return next
+                                  }
 
-                                return { ...p, [group.name]: name }
-                              })
-                            }}>
-                            <span className="cv-chip__name">{name}</span>
-                            {avail && mp != null ? (
-                              <span className="cv-chip__price">{formatBuyerRub(mp * (rate?.cny_rub || 1))}</span>
-                            ) : !avail ? (
-                              <span className="cv-chip__price cv-chip__price--na">—</span>
-                            ) : null}
-                          </button>
-                        )
-                      })}
+                                  return { ...p, [group.name]: name }
+                                })
+                              }}>
+                              <span className="cv-chip__name">{name}</span>
+                              {avail && mp != null ? (
+                                <span className="cv-chip__price">{formatBuyerRub(mp * (rate?.cny_rub || 1))}</span>
+                              ) : !avail ? (
+                                <span className="cv-chip__price cv-chip__price--na">—</span>
+                              ) : null}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                  )
+                })
+              ) : null}
 
-          {/* ── sizes ── */}
-          {hasSizes && (
-            <div className="cp-variants">
-              <div className="cv-group">
-                <div className="cv-group__label">Размер</div>
-                <div className="cv-group__list cv-group__list--sizes">
-                  {(product.available_sizes || []).map((raw) => {
-                    const name = typeof raw === 'string' ? raw : raw.name || String(raw)
-                    const shouldHighlightStepFiveFocus = shouldShowOrderGuideStepFiveSizeTarget
-                      && matchesOrderGuidePreferredSize(name)
-                    return (
-                      <button key={name}
-                        className={`cv-size pressable${selSize === name ? ' active' : ''}${!canSelectStandaloneSizes ? ' disabled' : ''}`}
-                        data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
-                        aria-disabled={!canSelectStandaloneSizes}
-                        disabled={!canSelectStandaloneSizes}
-                        style={!canSelectStandaloneSizes ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
-                        onClick={() => {
-                          if (!canSelectStandaloneSizes) return
-                          haptic?.('light')
-                          setAddedToCart(false)
-                          addedCartUrlRef.current = null
-                          setSavedCalcId(null)
-                          setSelSize((p) => (p === name ? '' : name))
-                        }}>
-                        {name}
-                      </button>
-                    )
-                  })}
+              {hasSizes ? (
+                <div className="cv-group">
+                  <div className="cv-group__label">Размер</div>
+                  <div className="cv-group__list cv-group__list--sizes">
+                    {(product.available_sizes || []).map((raw) => {
+                      const name = typeof raw === 'string' ? raw : raw.name || String(raw)
+                      const shouldHighlightStepFiveFocus = shouldShowOrderGuideStepFiveSizeTarget
+                        && matchesOrderGuidePreferredSize(name)
+                      return (
+                        <button key={name}
+                          className={`cv-size pressable${selSize === name ? ' active' : ''}${!canSelectStandaloneSizes ? ' disabled' : ''}`}
+                          data-order-guide-step-five-target={shouldHighlightStepFiveFocus ? 'size' : undefined}
+                          aria-disabled={!canSelectStandaloneSizes}
+                          disabled={!canSelectStandaloneSizes}
+                          style={!canSelectStandaloneSizes ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
+                          onClick={() => {
+                            if (!canSelectStandaloneSizes) return
+                            haptic?.('light')
+                            setAddedToCart(false)
+                            addedCartUrlRef.current = null
+                            setSavedCalcId(null)
+                            setManualPoizonVariantSelected(false)
+                            setManualPrice('')
+                            setSelSize((p) => (p === name ? '' : name))
+                          }}>
+                          {name}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
-          )}
+          ) : null}
+
+          <div className="cp-variants cp-variants--manual-choice">
+            <p className="cp-variants__manual-hint">{POIZON_MANUAL_VARIANT_HINT_TEXT}</p>
+            <PoizonManualVariantButton
+              active={manualPoizonVariantSelected}
+              onClick={() => {
+                haptic?.('light')
+                setAddedToCart(false)
+                addedCartUrlRef.current = null
+                setSavedCalcId(null)
+                setManualPrice('')
+                setSelVariants({})
+                setSelSize('')
+                pendingManualPriceScrollRef.current = !manualPoizonVariantSelected
+                setManualPoizonVariantSelected((currentValue) => !currentValue)
+              }}
+            />
+          </div>
 
           {result && addedToCart ? (
             <div ref={addToCartSuccessRef} className="calc-result__section calc-result__state-banner">

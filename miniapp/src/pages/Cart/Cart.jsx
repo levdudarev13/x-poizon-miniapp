@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import BottomSheet from '../../components/ui/BottomSheet'
+import PoizonManualVariantButton from '../../components/ui/PoizonManualVariantButton'
 import {
   IconCheck,
   IconChevronDown,
@@ -28,6 +29,9 @@ import { useTelegram } from '../../hooks/useTelegram'
 import { proxyImageUrl } from '../../utils/media'
 import {
   derivePersistedVariantSelection,
+  POIZON_MANUAL_PRICE_HELPER_TEXT,
+  POIZON_MANUAL_VARIANT_HINT_TEXT,
+  POIZON_MANUAL_VARIANT_SELECTION_TEXT,
   shouldAllowFallbackVariantSelection,
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
@@ -111,11 +115,14 @@ export default function Cart({ active, guidePreview = null }) {
   const [detailVariantsOpen, setDetailVariantsOpen] = useState(false)
   const [detailSelVariants, setDetailSelVariants] = useState({})
   const [detailSelSize, setDetailSelSize] = useState('')
+  const [detailManualPoizonVariantSelected, setDetailManualPoizonVariantSelected] = useState(false)
   const [detailManualPrice, setDetailManualPrice] = useState('')
   const [detailRecalcLoading, setDetailRecalcLoading] = useState(false)
   const detailTouchX = useRef(null)
   const detailRecalcTimer = useRef(null)
   const detailSelectionResetKeyRef = useRef('')
+  const detailManualPriceInputRef = useRef(null)
+  const pendingDetailManualScrollRef = useRef(false)
 
   // Clear confirmation
   const [showClear, setShowClear] = useState(false)
@@ -243,6 +250,7 @@ export default function Cart({ active, guidePreview = null }) {
     setDetailVariantsOpen(false)
     setDetailSelVariants({})
     setDetailSelSize('')
+    setDetailManualPoizonVariantSelected(false)
     setDetailManualPrice('')
     detailSelectionResetKeyRef.current = ''
     try {
@@ -267,6 +275,7 @@ export default function Cart({ active, guidePreview = null }) {
     setDetailError(false)
     setDetailSelVariants({})
     setDetailSelSize('')
+    setDetailManualPoizonVariantSelected(false)
     setDetailManualPrice('')
     detailSelectionResetKeyRef.current = ''
   }
@@ -282,14 +291,19 @@ export default function Cart({ active, guidePreview = null }) {
   const detailCanSelectStandaloneSizes = !detailHasSizes || shouldAllowFallbackVariantSelection(detailProduct)
   const detailHasVariants = detailVariantGroups.length > 0 || detailHasSizes
   const detailAllVariantsSelected = detailVariantGroups.every((group) => detailSelVariants[group.name])
-  const detailAllOptionsSelected = detailAllVariantsSelected && (!detailHasSizes || !detailCanSelectStandaloneSizes || Boolean(detailSelSize))
-  const detailSelectedOptionsText = [
-    ...detailVariantGroups.map((group) => detailSelVariants[group.name]).filter(Boolean),
-    ...(detailHasSizes && detailSelSize ? [detailSelSize] : []),
-  ].join(' / ')
+  const detailAllOptionsSelected = detailManualPoizonVariantSelected || (
+    detailAllVariantsSelected && (!detailHasSizes || !detailCanSelectStandaloneSizes || Boolean(detailSelSize))
+  )
+  const detailSelectedOptionsText = detailManualPoizonVariantSelected
+    ? POIZON_MANUAL_VARIANT_SELECTION_TEXT
+    : [
+      ...detailVariantGroups.map((group) => detailSelVariants[group.name]).filter(Boolean),
+      ...(detailHasSizes && detailSelSize ? [detailSelSize] : []),
+    ].join(' / ')
   const detailSavedSizeText = String(detailProduct?.size || detailItem?.size || '').trim()
   const detailSizeText = detailSelectedOptionsText || detailSavedSizeText
-  const detailManualPriceRequired = shouldRequireManualPriceForSelection(detailProduct, detailSelectedOptionsText)
+  const detailManualPriceRequired = detailManualPoizonVariantSelected
+    || shouldRequireManualPriceForSelection(detailProduct, detailSelectedOptionsText)
   const detailNeedsManualPriceInput = detailAllOptionsSelected && (
     detailManualPriceRequired || Boolean(detailProduct?.price_is_starting)
   )
@@ -387,6 +401,7 @@ export default function Cart({ active, guidePreview = null }) {
     const restoredSelection = derivePersistedVariantSelection(detailData.product)
     setDetailSelVariants(restoredSelection.selectedVariants)
     setDetailSelSize(restoredSelection.selectedSize)
+    setDetailManualPoizonVariantSelected(false)
     setDetailManualPrice('')
     detailSelectionResetKeyRef.current = ''
     return
@@ -486,6 +501,21 @@ export default function Cart({ active, guidePreview = null }) {
 
     detailSelectionResetKeyRef.current = selectionResetKey
   }, [detailItem?.id, detailProduct, detailSelectedOptionsText])
+
+  useEffect(() => {
+    if (!pendingDetailManualScrollRef.current || !detailManualPriceInputRef.current) {
+      return
+    }
+
+    pendingDetailManualScrollRef.current = false
+    window.requestAnimationFrame(() => {
+      detailManualPriceInputRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'center',
+        inline: 'nearest',
+      })
+    })
+  }, [detailSelectedOptionsText, prefersReducedMotion])
 
   // Recalculate & auto-save when variant/size changes
   const detailItemRef = useRef(null)
@@ -1093,7 +1123,7 @@ export default function Cart({ active, guidePreview = null }) {
               ) : null}
             </div>
 
-            {detailHasVariants ? (
+            {detailProduct ? (
               <div className="cp-specs card">
                 <button
                   className="cp-specs__toggle pressable"
@@ -1132,6 +1162,8 @@ export default function Cart({ active, guidePreview = null }) {
                                   onClick={() => {
                                     if (!avail) return
                                     haptic?.('light')
+                                    setDetailManualPoizonVariantSelected(false)
+                                    setDetailManualPrice('')
                                     setDetailSelVariants((p) => {
                                       if (p[group.name] === name) {
                                         const next = { ...p }
@@ -1172,6 +1204,8 @@ export default function Cart({ active, guidePreview = null }) {
                                 onClick={() => {
                                   if (!detailCanSelectStandaloneSizes) return
                                   haptic?.('light')
+                                  setDetailManualPoizonVariantSelected(false)
+                                  setDetailManualPrice('')
                                   setDetailSelSize((p) => (p === name ? '' : name))
                                 }}
                               >
@@ -1182,15 +1216,33 @@ export default function Cart({ active, guidePreview = null }) {
                         </div>
                       </div>
                     ) : null}
+                    <div className="cart-detail__manual-choice">
+                      <p className="cart-detail__manual-choice-hint">{POIZON_MANUAL_VARIANT_HINT_TEXT}</p>
+                      <PoizonManualVariantButton
+                        active={detailManualPoizonVariantSelected}
+                        onClick={() => {
+                          haptic?.('light')
+                          setDetailManualPrice('')
+                          setDetailSelVariants({})
+                          setDetailSelSize('')
+                          pendingDetailManualScrollRef.current = !detailManualPoizonVariantSelected
+                          setDetailManualPoizonVariantSelected((currentValue) => !currentValue)
+                        }}
+                      />
+                    </div>
                     {detailNeedsManualPriceInput ? (
                       <div className="cart-detail__manual-price">
                         <label className="cart-detail__manual-price-label" htmlFor="cart-detail-manual-price">
-                          {detailProduct?.price_is_starting
-                            ? 'Укажите точную цену в юанях (¥)'
-                            : 'Введите цену в юанях (¥) для выбранного варианта'}
+                          <span>
+                            {detailProduct?.price_is_starting
+                              ? 'Укажите точную цену в юанях (¥)'
+                              : 'Введите цену в юанях (¥)'}
+                          </span>
+                          <span className="cart-detail__manual-price-copy">{POIZON_MANUAL_PRICE_HELPER_TEXT}</span>
                         </label>
                         <input
                           id="cart-detail-manual-price"
+                          ref={detailManualPriceInputRef}
                           className="cart-detail__manual-price-input"
                           type="number"
                           inputMode="decimal"

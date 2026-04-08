@@ -4,6 +4,9 @@ export function hasSelectableVariantGroups(product) {
 }
 
 const SIZE_GROUP_NAMES = ['size', 'размер', 'sz', 'taille', '尺码', '尺寸']
+export const POIZON_MANUAL_VARIANT_SELECTION_TEXT = 'Вариант без цены (Poizon)'
+export const POIZON_MANUAL_VARIANT_HINT_TEXT = 'Выберите этот вариант, если у товара на Poizon была такая же кнопка.'
+export const POIZON_MANUAL_PRICE_HELPER_TEXT = 'Соответствующую выбранному размеру, как на Poizon, так как товар находится не в Китае.'
 
 function normalizeOptionValue(value) {
   return typeof value === 'string' ? value.trim() : String(value || '').trim()
