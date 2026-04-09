@@ -1974,6 +1974,17 @@ def _admin_order_display_name(item: dict) -> str:
     ).strip()[:80]
 
 
+_SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS = 3
+_SEND_TELEGRAM_MESSAGE_RETRY_DELAYS_SECONDS = (0.75, 1.5)
+_SEND_TELEGRAM_MESSAGE_TIMEOUT = httpx.Timeout(10.0, connect=4.0)
+
+
+def _should_retry_telegram_message_error(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response is not None and exc.response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR
+    return isinstance(exc, httpx.TransportError)
+
+
 async def _send_telegram_message(
     user_id: int,
     text: str,
@@ -1991,21 +2002,47 @@ async def _send_telegram_message(
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            response = await client.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                json=payload,
+    for attempt in range(1, _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=_SEND_TELEGRAM_MESSAGE_TIMEOUT, follow_redirects=True) as client:
+                response = await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json=payload,
+                )
+                response.raise_for_status()
+                result = response.json()
+                if not result.get("ok"):
+                    raise RuntimeError(result.get("description") or "sendMessage failed")
+            return True
+        except Exception as exc:
+            should_retry = (
+                attempt < _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS
+                and _should_retry_telegram_message_error(exc)
             )
-            response.raise_for_status()
-            result = response.json()
-            if not result.get("ok"):
-                raise RuntimeError(result.get("description") or "sendMessage failed")
-    except Exception:
-        log.warning("Failed to send Telegram notification to user_id=%s", user_id, exc_info=True)
-        return False
+            if should_retry:
+                log.warning(
+                    "Telegram send attempt %s/%s failed for user_id=%s: %s",
+                    attempt,
+                    _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS,
+                    user_id,
+                    exc,
+                )
+                retry_delay = _SEND_TELEGRAM_MESSAGE_RETRY_DELAYS_SECONDS[
+                    min(attempt - 1, len(_SEND_TELEGRAM_MESSAGE_RETRY_DELAYS_SECONDS) - 1)
+                ]
+                await asyncio.sleep(retry_delay)
+                continue
 
-    return True
+            log.warning(
+                "Failed to send Telegram notification to user_id=%s on attempt %s/%s",
+                user_id,
+                attempt,
+                _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS,
+                exc_info=True,
+            )
+            return False
+
+    return False
 
 
 def _format_admin_order_total_rub(amount_rub: float) -> str:

@@ -1,7 +1,9 @@
 import asyncio
 import unittest
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 
 import miniapp_server
 
@@ -156,12 +158,23 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
                 }
             ),
         ), patch(
+            "miniapp_server.db.cart_get_pending_order_items",
+            new=AsyncMock(
+                return_value=[
+                    {"subtotal_rub": 1250.4},
+                    {"subtotal_rub": 4000.0},
+                ]
+            ),
+        ), patch(
             "miniapp_server.db.cart_apply_delivery_snapshot",
             new=AsyncMock(side_effect=record_snapshot),
         ) as snapshot_mock, patch(
             "miniapp_server.db.cart_submit_order",
             new=AsyncMock(side_effect=record_submit),
         ) as submit_mock, patch(
+            "miniapp_server._notify_admin_order_submission",
+            new=AsyncMock(side_effect=lambda **kwargs: call_order.append("notify")),
+        ) as notify_mock, patch(
             "miniapp_server._apply_order_delivery_pricing",
             new=AsyncMock(side_effect=lambda *args, **kwargs: call_order.append("pricing")),
         ) as pricing_mock, patch(
@@ -206,7 +219,8 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
             submitted_at,
         )
         submit_mock.assert_awaited_once_with(42)
-        self.assertEqual(call_order, ["pricing", "snapshot", "submit"])
+        notify_mock.assert_awaited_once_with(user_id=42, order_total_rub=5250.4)
+        self.assertEqual(call_order, ["pricing", "snapshot", "submit", "notify"])
         self.assertEqual(
             payload,
             {
@@ -215,6 +229,79 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
                 "submitted_at": fixed_submitted_at,
             },
         )
+
+    def test_notify_admin_order_submission_formats_message_for_all_admins(self) -> None:
+        expected_text = (
+            "Пользователь Alice Example (@alice) оформил заказ на сумму 12 345 ₽.\n\n"
+            "Свяжитесь с ним для уточнения деталей и оплаты."
+        )
+
+        with patch.object(miniapp_server, "ADMIN_USER_IDS", (101, 202)), patch(
+            "miniapp_server.db.get_or_create_user",
+            new=AsyncMock(
+                return_value={
+                    "user_id": 42,
+                    "username": "alice",
+                    "first_name": "Alice",
+                    "last_name": "Example",
+                }
+            ),
+        ), patch(
+            "miniapp_server._send_telegram_message",
+            new=AsyncMock(return_value=True),
+        ) as send_mock:
+            asyncio.run(
+                miniapp_server._notify_admin_order_submission(
+                    user_id=42,
+                    order_total_rub=12345.0,
+                )
+            )
+
+        self.assertEqual(send_mock.await_count, 2)
+        self.assertEqual(send_mock.await_args_list[0].args, (101, expected_text))
+        self.assertEqual(send_mock.await_args_list[1].args, (202, expected_text))
+
+    def test_send_telegram_message_retries_transport_errors(self) -> None:
+        class FakeAsyncClient:
+            attempts = 0
+            requests = []
+
+            def __init__(self, *args, **kwargs):
+                self.args = args
+                self.kwargs = kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json):
+                type(self).attempts += 1
+                type(self).requests.append((url, json))
+                if type(self).attempts < 3:
+                    raise httpx.ConnectTimeout("timed out")
+                response = MagicMock()
+                response.raise_for_status.return_value = None
+                response.json.return_value = {"ok": True}
+                return response
+
+        with patch.object(miniapp_server, "BOT_TOKEN", "test-token"), patch(
+            "miniapp_server.httpx.AsyncClient",
+            new=FakeAsyncClient,
+        ), patch(
+            "miniapp_server.asyncio.sleep",
+            new=AsyncMock(),
+        ) as sleep_mock:
+            delivered = asyncio.run(miniapp_server._send_telegram_message(101, "hello"))
+
+        self.assertTrue(delivered)
+        self.assertEqual(FakeAsyncClient.attempts, 3)
+        self.assertEqual(len(FakeAsyncClient.requests), 3)
+        self.assertEqual(sleep_mock.await_args_list[0].args, (0.75,))
+        self.assertEqual(sleep_mock.await_args_list[1].args, (1.5,))
+        self.assertEqual(FakeAsyncClient.requests[0][1]["chat_id"], 101)
+        self.assertEqual(FakeAsyncClient.requests[0][1]["text"], "hello")
 
     def test_submit_order_payload_passes_express_delivery_type_to_repricing(self) -> None:
         with patch(
@@ -235,6 +322,9 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
             "miniapp_server._apply_order_delivery_pricing",
             new=AsyncMock(),
         ) as pricing_mock, patch(
+            "miniapp_server.db.cart_get_pending_order_items",
+            new=AsyncMock(return_value=[]),
+        ), patch(
             "miniapp_server.db.cart_apply_delivery_snapshot",
             new=AsyncMock(),
         ), patch(

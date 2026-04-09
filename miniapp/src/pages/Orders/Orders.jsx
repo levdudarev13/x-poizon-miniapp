@@ -28,6 +28,7 @@ import {
   normalizeDeliveryType,
 } from '../../utils/deliveryPricing'
 import { parseRepairJson, repairMojibakeDeep } from '../../utils/text'
+import { normalizeAdminSupport, openAdminSupportChat } from '../../utils/support'
 import './Orders.css'
 
 const ORDER_STATE_ICONS = {
@@ -275,10 +276,11 @@ function OrdersModalPortal({ children }) {
 export default function Orders({
   active,
   onRequestOpenProfileDelivery,
+  supportLink = null,
   guidePreview = null,
   guidePreviewSequenceStage = ORDER_GUIDE_SEQUENCE_STAGE.intro,
 }) {
-  const { userId, initData, haptic } = useTelegram()
+  const { userId, initData, haptic, tg } = useTelegram()
   const prefersReducedMotion = useReducedMotion()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -320,6 +322,7 @@ export default function Orders({
   const resolvedPricingState = isGuidePreview ? previewPricingState : pricingState
   const resolvedDeliveryInfoOpen = isGuidePreview ? false : deliveryInfoOpen
   const resolvedPriceInfoOpen = isGuidePreview ? false : priceInfoOpen
+  const resolvedSupportLink = useMemo(() => normalizeAdminSupport(supportLink), [supportLink])
   const resolvedDeliveryType = isGuidePreview
     ? (
       guidePreviewSequenceStage >= ORDER_GUIDE_SEQUENCE_STAGE.delivery
@@ -651,6 +654,9 @@ export default function Orders({
       ? 'Экспресс до Москвы'
       : 'Обычная до Москвы'
   const deliveryCueVisible = resolvedDeliveryStatus.isComplete === false
+  const handleOpenSupportChat = useCallback(() => {
+    openAdminSupportChat(resolvedSupportLink, { tg, haptic })
+  }, [haptic, resolvedSupportLink, tg])
 
   return (
     <div className={`page orders-page buyer-page buyer-page--orders${isGuidePreview ? ' orders-page--guide-preview' : ''}`}>
@@ -690,7 +696,22 @@ export default function Orders({
             title={BUYER_STATE_COPY.orders.submitSuccess.title}
             body={BUYER_STATE_COPY.orders.submitSuccess.body}
             icon={getOrdersIcon(BUYER_STATE_COPY.orders.submitSuccess.iconName)}
-          />
+          >
+            <div className="ord-success-support">
+              <p className="ord-success-support__text">
+                Если у вас остались вопросы по заказу или вы хотите оформить его быстрее,
+                напишите оператору, и он ответит вам в ближайшее время.
+              </p>
+              <button
+                type="button"
+                className="ord-success-support__button pressable"
+                onClick={handleOpenSupportChat}
+              >
+                <span>Написать оператору</span>
+                <IconExternalLink size={18} />
+              </button>
+            </div>
+          </StateSurface>
         </div>
       ) : !resolvedItems.length ? (
         <div className="page-content ord-page__state">
