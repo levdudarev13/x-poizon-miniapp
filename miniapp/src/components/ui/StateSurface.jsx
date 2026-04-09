@@ -5,6 +5,7 @@ export default function StateSurface({
   icon,
   title,
   body,
+  children,
   actionLabel,
   onAction,
   secondaryActionLabel,
@@ -28,6 +29,7 @@ export default function StateSurface({
       {eyebrow ? <p className="ui-state__eyebrow">{eyebrow}</p> : null}
       {title ? <h2 className="ui-state__title">{title}</h2> : null}
       {body ? <p className="ui-state__body">{body}</p> : null}
+      {children}
       {hasSecondaryAction ? (
         <div className="ui-state__actions">
           {hasPrimaryAction ? (
