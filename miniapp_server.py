@@ -2109,6 +2109,30 @@ async def _notify_admin_order_submission(*, user_id: int, order_total_rub: float
         log.warning("Failed to notify admins about submitted order for user_id=%s", user_id, exc_info=True)
 
 
+def _dispatch_admin_order_submission_notification(*, user_id: int, order_total_rub: float) -> None:
+    if user_id <= 0:
+        return
+
+    def _runner() -> None:
+        try:
+            asyncio.run(_notify_admin_order_submission(
+                user_id=user_id,
+                order_total_rub=order_total_rub,
+            ))
+        except Exception:
+            log.warning(
+                "Background submitted-order notification crashed for user_id=%s",
+                user_id,
+                exc_info=True,
+            )
+
+    threading.Thread(
+        target=_runner,
+        name=f"submitted-order-notify-{user_id}",
+        daemon=True,
+    ).start()
+
+
 async def _notify_admin_order_action(action: str, item: dict) -> None:
     user_id = int(item.get("user_id") or 0)
     if user_id <= 0:
@@ -3029,7 +3053,7 @@ async def _submit_order_payload(payload: dict) -> dict:
     )
     await db.cart_submit_order(user_id)
     if pending_order_items:
-        await _notify_admin_order_submission(user_id=user_id, order_total_rub=order_total_rub)
+        _dispatch_admin_order_submission_notification(user_id=user_id, order_total_rub=order_total_rub)
     return {
         "ok": True,
         "submission_batch_id": submission_batch_id,

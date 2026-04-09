@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -172,8 +173,8 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
             "miniapp_server.db.cart_submit_order",
             new=AsyncMock(side_effect=record_submit),
         ) as submit_mock, patch(
-            "miniapp_server._notify_admin_order_submission",
-            new=AsyncMock(side_effect=lambda **kwargs: call_order.append("notify")),
+            "miniapp_server._dispatch_admin_order_submission_notification",
+            new=MagicMock(side_effect=lambda **kwargs: call_order.append("notify")),
         ) as notify_mock, patch(
             "miniapp_server._apply_order_delivery_pricing",
             new=AsyncMock(side_effect=lambda *args, **kwargs: call_order.append("pricing")),
@@ -219,7 +220,7 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
             submitted_at,
         )
         submit_mock.assert_awaited_once_with(42)
-        notify_mock.assert_awaited_once_with(user_id=42, order_total_rub=5250.4)
+        notify_mock.assert_called_once_with(user_id=42, order_total_rub=5250.4)
         self.assertEqual(call_order, ["pricing", "snapshot", "submit", "notify"])
         self.assertEqual(
             payload,
@@ -302,6 +303,52 @@ class DeliveryProfileHelpersTests(unittest.TestCase):
         self.assertEqual(sleep_mock.await_args_list[1].args, (1.5,))
         self.assertEqual(FakeAsyncClient.requests[0][1]["chat_id"], 101)
         self.assertEqual(FakeAsyncClient.requests[0][1]["text"], "hello")
+
+    def test_dispatch_admin_order_submission_notification_starts_daemon_thread(self) -> None:
+        started_threads = []
+        notify_coro = SimpleNamespace(name="notify-coro")
+
+        class FakeThread:
+            def __init__(self, *, target, name, daemon):
+                self.target = target
+                self.name = name
+                self.daemon = daemon
+
+            def start(self):
+                started_threads.append(
+                    {
+                        "name": self.name,
+                        "daemon": self.daemon,
+                    }
+                )
+                self.target()
+
+        with patch(
+            "miniapp_server.threading.Thread",
+            new=FakeThread,
+        ), patch(
+            "miniapp_server._notify_admin_order_submission",
+            new=MagicMock(return_value=notify_coro),
+        ) as notify_mock, patch(
+            "miniapp_server.asyncio.run",
+            new=MagicMock(),
+        ) as run_mock:
+            miniapp_server._dispatch_admin_order_submission_notification(
+                user_id=42,
+                order_total_rub=9900.0,
+            )
+
+        notify_mock.assert_called_once_with(user_id=42, order_total_rub=9900.0)
+        run_mock.assert_called_once_with(notify_coro)
+        self.assertEqual(
+            started_threads,
+            [
+                {
+                    "name": "submitted-order-notify-42",
+                    "daemon": True,
+                }
+            ],
+        )
 
     def test_submit_order_payload_passes_express_delivery_type_to_repricing(self) -> None:
         with patch(
