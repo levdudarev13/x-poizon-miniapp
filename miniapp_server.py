@@ -2008,6 +2008,70 @@ async def _send_telegram_message(
     return True
 
 
+def _format_admin_order_total_rub(amount_rub: float) -> str:
+    try:
+        normalized_amount = int(round(float(amount_rub or 0)))
+    except (TypeError, ValueError):
+        normalized_amount = 0
+    return f"{normalized_amount:,}".replace(",", " ") + " ₽"
+
+
+def _format_admin_submitter_label(identity: dict[str, str | int]) -> str:
+    user_id = int(identity.get("user_id") or 0)
+    username = str(identity.get("username") or "").strip().lstrip("@")
+    display_name = str(identity.get("display_name") or "").strip()
+    contact_label = str(identity.get("contact_label") or "").strip()
+
+    if username:
+        if display_name and not display_name.startswith("@") and not display_name.startswith("Пользователь #"):
+            return f"{display_name} (@{username})"
+        return f"@{username}"
+
+    if display_name and not display_name.startswith("Пользователь #"):
+        return display_name
+
+    if contact_label:
+        return contact_label
+
+    return f"id:{user_id}" if user_id > 0 else "пользователь"
+
+
+async def _notify_admin_order_submission(*, user_id: int, order_total_rub: float) -> None:
+    admin_targets = tuple(dict.fromkeys(
+        int(admin_user_id)
+        for admin_user_id in ADMIN_USER_IDS
+        if int(admin_user_id) > 0
+    ))
+    if user_id <= 0 or not admin_targets:
+        return
+
+    try:
+        user = await db.get_or_create_user(user_id)
+        identity = _build_rich_admin_user_identity(
+            user_id,
+            str(user.get("username") or ""),
+            str(user.get("first_name") or ""),
+            str(user.get("last_name") or ""),
+        )
+        user_label = _format_admin_submitter_label(identity)
+        amount_label = _format_admin_order_total_rub(order_total_rub)
+        notify_text = (
+            f"Пользователь {user_label} оформил заказ на сумму {amount_label}.\n\n"
+            "Свяжитесь с ним для уточнения деталей и оплаты."
+        )
+
+        for admin_user_id in admin_targets:
+            delivered = await _send_telegram_message(admin_user_id, notify_text)
+            if not delivered:
+                log.warning(
+                    "Failed to deliver submitted-order notification to admin_id=%s for user_id=%s",
+                    admin_user_id,
+                    user_id,
+                )
+    except Exception:
+        log.warning("Failed to notify admins about submitted order for user_id=%s", user_id, exc_info=True)
+
+
 async def _notify_admin_order_action(action: str, item: dict) -> None:
     user_id = int(item.get("user_id") or 0)
     if user_id <= 0:
@@ -2910,6 +2974,13 @@ async def _submit_order_payload(payload: dict) -> dict:
         delivery_data,
         delivery_type=delivery_type,
     )
+    pending_order_items = await db.cart_get_pending_order_items(user_id)
+    order_total_rub = 0.0
+    for item in pending_order_items:
+        try:
+            order_total_rub += float(item.get("subtotal_rub") or item.get("total_with_margin_rub") or 0)
+        except (TypeError, ValueError):
+            continue
 
     submission_batch_id = f"sub-{user_id}-{int(time.time() * 1000)}"
     submitted_at = datetime.utcnow().isoformat()
@@ -2920,6 +2991,8 @@ async def _submit_order_payload(payload: dict) -> dict:
         submitted_at,
     )
     await db.cart_submit_order(user_id)
+    if pending_order_items:
+        await _notify_admin_order_submission(user_id=user_id, order_total_rub=order_total_rub)
     return {
         "ok": True,
         "submission_batch_id": submission_batch_id,

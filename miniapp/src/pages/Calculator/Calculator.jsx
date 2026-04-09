@@ -20,6 +20,7 @@ import {
   IconArrowLeft,
   IconChevronDown,
   IconCheck,
+  IconExternalLink,
   IconInfo,
   IconLink,
   IconPackage,
@@ -56,6 +57,7 @@ import {
   shouldRequireManualPriceForSelection,
 } from '../../utils/productVariants'
 import { repairMojibakeDeep } from '../../utils/text'
+import { normalizeAdminSupport, openAdminSupportChat } from '../../utils/support'
 import './Calculator.css'
 
 /* ── fetch wrapper with retry ── */
@@ -1013,6 +1015,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [loadingMode, setLoadingMode] = useState('product')
   const [loadingText, setLoadingText] = useState('')
   const [specsOpen, setSpecsOpen] = useState(false)
+  const [supportLink, setSupportLink] = useState(() => normalizeAdminSupport(null))
   const [adminSettings, setAdminSettings] = useState(null)
 
   /* ── home promo state ── */
@@ -1386,12 +1389,18 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       if (data?.admin_settings) {
         setAdminSettings(data.admin_settings)
       }
+      setSupportLink(normalizeAdminSupport({
+        url: data?.admin_contact_url,
+        username: data?.admin_contact_username,
+        userId: data?.admin_contact_user_id,
+      }))
       setIsAdminViewer(Boolean(data?.is_admin))
       await applyShowcaseSource(data)
       applyAboutDetailsSource(data)
       applyPromoBannerSource(data)
       return data
     } catch {
+      setSupportLink(normalizeAdminSupport(null))
       setIsAdminViewer(false)
       setAboutDetailsSlides(null)
       setPromoBanners(CALC_PROMO_BANNERS)
@@ -2169,6 +2178,10 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setCartAdding(false)
     }
   }
+
+  const handleContactOperator = useCallback(() => {
+    openAdminSupportChat(supportLink, { tg, haptic })
+  }, [haptic, supportLink, tg])
 
   const handleBack = () => {
     parseProductRequestIdRef.current += 1
@@ -3403,6 +3416,26 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
                 rows={specRows}
                 icon={<IconInfo size={16} />}
               />
+            </div>
+          )}
+
+          {result && (
+            <div className="calc-result__section">
+              <section className="calc-result__operator ui-surface-panel">
+                <p className="calc-result__operator-text">
+                  Если вы обнаружили ошибку при расчете или у вас возникли вопросы, вы можете
+                  написать оператору, и он свяжется с вами в ближайшее время.
+                </p>
+
+                <button
+                  type="button"
+                  className="calc-result__operator-button pressable"
+                  onClick={handleContactOperator}
+                >
+                  <span>Связаться с оператором</span>
+                  <IconExternalLink size={18} />
+                </button>
+              </section>
             </div>
           )}
 
