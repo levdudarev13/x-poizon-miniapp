@@ -2110,6 +2110,10 @@ def _vk_event_secret_matches(payload: dict | None) -> bool:
     return bool(received_secret) and secrets.compare_digest(received_secret, VK_CALLBACK_SECRET)
 
 
+def _vk_event_requires_secret(event_type: str) -> bool:
+    return str(event_type or "").strip().lower() != "confirmation"
+
+
 def _extract_vk_callback_message(payload: dict | None) -> dict | None:
     if not isinstance(payload, dict):
         return None
@@ -3757,11 +3761,12 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                 if not _vk_event_group_matches(payload):
                     self._send_text("invalid group", status=403)
                     return
-                if not _vk_event_secret_matches(payload):
+
+                event_type = str(payload.get("type") or "").strip().lower()
+                if _vk_event_requires_secret(event_type) and not _vk_event_secret_matches(payload):
                     self._send_text("invalid secret", status=403)
                     return
 
-                event_type = str(payload.get("type") or "").strip().lower()
                 if event_type == "confirmation":
                     if not VK_CALLBACK_CONFIRMATION_CODE:
                         self._send_text("confirmation code is not configured", status=503)

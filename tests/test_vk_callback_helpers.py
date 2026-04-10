@@ -7,6 +7,7 @@ from miniapp_server import (
     _extract_vk_callback_message,
     _handle_vk_message_new,
     _vk_event_group_matches,
+    _vk_event_requires_secret,
     _vk_event_secret_matches,
 )
 
@@ -23,6 +24,10 @@ class VkCallbackHelperTests(unittest.TestCase):
         with patch("miniapp_server.VK_CALLBACK_SECRET", "secret123"):
             self.assertTrue(_vk_event_secret_matches({"secret": "secret123"}))
             self.assertFalse(_vk_event_secret_matches({"secret": "wrong"}))
+
+    def test_confirmation_event_does_not_require_secret(self) -> None:
+        self.assertFalse(_vk_event_requires_secret("confirmation"))
+        self.assertTrue(_vk_event_requires_secret("message_new"))
 
     def test_extract_vk_message_supports_nested_callback_payload(self) -> None:
         payload = {
