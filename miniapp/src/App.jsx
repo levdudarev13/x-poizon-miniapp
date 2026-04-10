@@ -10,6 +10,7 @@ import Orders from './pages/Orders/Orders'
 import { bootstrapWithInitData } from './api/admin.js'
 import { useTelegram } from './hooks/useTelegram'
 import { useShellSwipeGuard } from './hooks/useShellSwipeGuard'
+import { clearAppAuthState, writeAppAuthState } from './utils/appAuthState.js'
 import { OPEN_FAQ_REQUEST_EVENT } from './utils/faqNavigation'
 
 const TAB_ORDER_BASE = ['history', 'cart', 'calculator', 'profile', 'orders']
@@ -44,7 +45,10 @@ export default function App() {
     tg,
     haptic,
     userId,
+    platformUserId,
     initData,
+    vkLaunchParams,
+    launchPlatform,
     safeAreaInset,
     contentSafeAreaInset,
     viewportHeight,
@@ -98,32 +102,38 @@ export default function App() {
   }, [activeTab, fetchCartCount])
 
   useEffect(() => {
-    if (!userId) {
+    if (!platformUserId) {
       setIsAdmin(false)
       setBootstrapPayload(null)
+      clearAppAuthState()
       return
     }
 
     let isMounted = true
 
-    bootstrapWithInitData({ userId, initData })
+    bootstrapWithInitData({ userId: platformUserId, initData, vkLaunchParams })
       .then((data) => {
         if (isMounted) {
           setBootstrapPayload(data || null)
           setIsAdmin(Boolean(data?.is_admin))
+          writeAppAuthState({
+            userId: data?.user_id,
+            launchPlatform,
+          })
         }
       })
       .catch(() => {
         if (isMounted) {
           setBootstrapPayload(null)
           setIsAdmin(false)
+          clearAppAuthState()
         }
       })
 
     return () => {
       isMounted = false
     }
-  }, [initData, userId])
+  }, [initData, launchPlatform, platformUserId, vkLaunchParams])
 
   useEffect(() => {
     if (activeTab === 'admin' && !isAdmin) {

@@ -27,7 +27,12 @@ active_requests = 0
 active_requests_lock = threading.Lock()
 
 import database as db
-from auth import get_user_id_from_init_data, get_user_profile_from_init_data, is_admin
+from auth import (
+    get_user_id_from_init_data,
+    get_user_id_from_vk_launch_params,
+    get_user_profile_from_init_data,
+    is_admin,
+)
 from config import (
     ADMIN_CONTACT_USER_ID,
     ADMIN_CONTACT_USERNAME,
@@ -901,10 +906,70 @@ async def _track_miniapp_activity(user_id: int | None) -> None:
         log.warning("Failed to record miniapp activity for user_id=%s", safe_user_id, exc_info=True)
 
 
+def _normalize_bootstrap_platform(
+    auth_platform: str | None,
+    *,
+    init_data_raw: str | None = None,
+    vk_launch_params_raw: str | None = None,
+) -> str:
+    normalized_platform = str(auth_platform or "").strip().lower()
+    if normalized_platform in {"telegram", "vk", "query"}:
+        return normalized_platform
+    if isinstance(init_data_raw, str) and init_data_raw:
+        return "telegram"
+    if isinstance(vk_launch_params_raw, str) and vk_launch_params_raw:
+        return "vk"
+    return "query"
+
+
+async def _resolve_bootstrap_user_context(
+    user_id: int | None,
+    *,
+    auth_platform: str | None = None,
+    init_data_raw: str | None = None,
+    vk_launch_params_raw: str | None = None,
+) -> tuple[int | None, int | None, str, dict | None]:
+    launch_platform = _normalize_bootstrap_platform(
+        auth_platform,
+        init_data_raw=init_data_raw,
+        vk_launch_params_raw=vk_launch_params_raw,
+    )
+    platform_user_id = int(user_id or 0)
+    if platform_user_id <= 0:
+        return None, None, launch_platform, None
+
+    if launch_platform == "vk":
+        user = await db.get_or_create_platform_user(
+            db.ACCOUNT_PLATFORM_VK,
+            str(platform_user_id),
+        )
+        return int(user.get("user_id") or 0), platform_user_id, launch_platform, user
+
+    init_user_profile = None
+    if isinstance(init_data_raw, str) and init_data_raw:
+        try:
+            candidate_profile = get_user_profile_from_init_data(init_data_raw)
+        except ValueError:
+            candidate_profile = None
+        if candidate_profile and int(candidate_profile.get("id") or 0) == platform_user_id:
+            init_user_profile = candidate_profile
+
+    user = await db.get_or_create_user(
+        platform_user_id,
+        (init_user_profile or {}).get("username", ""),
+        (init_user_profile or {}).get("first_name", ""),
+        (init_user_profile or {}).get("last_name", ""),
+    )
+    return int(user.get("user_id") or 0), platform_user_id, launch_platform, user
+
+
 async def _bootstrap_payload(
     user_id: int | None,
     is_admin_user: bool = False,
     init_data_raw: str | None = None,
+    *,
+    auth_platform: str | None = None,
+    vk_launch_params_raw: str | None = None,
 ) -> dict:
     rate = await er.get_rate()
     admin = await db.get_admin_settings()
@@ -916,23 +981,14 @@ async def _bootstrap_payload(
     about_details_payload = await _about_details_payload()
     promo_banners_payload = await _promo_banners_payload()
     user_settings = None
-    if user_id:
-        await _track_miniapp_activity(user_id)
-        init_user_profile = None
-        if isinstance(init_data_raw, str) and init_data_raw:
-            try:
-                candidate_profile = get_user_profile_from_init_data(init_data_raw)
-            except ValueError:
-                candidate_profile = None
-            if candidate_profile and int(candidate_profile.get("id") or 0) == int(user_id):
-                init_user_profile = candidate_profile
-
-        user = await db.get_or_create_user(
-            user_id,
-            (init_user_profile or {}).get("username", ""),
-            (init_user_profile or {}).get("first_name", ""),
-            (init_user_profile or {}).get("last_name", ""),
-        )
+    resolved_user_id, platform_user_id, launch_platform, user = await _resolve_bootstrap_user_context(
+        user_id,
+        auth_platform=auth_platform,
+        init_data_raw=init_data_raw,
+        vk_launch_params_raw=vk_launch_params_raw,
+    )
+    if resolved_user_id:
+        await _track_miniapp_activity(resolved_user_id)
         user_settings = {
             "margin_steps": json.loads(user.get("margin_steps", "[]") or "[]"),
             "margin_min_rub": float(user.get("margin_min_rub", DEFAULT_MARGIN_MIN_RUB)),
@@ -968,17 +1024,25 @@ async def _bootstrap_payload(
         "promo_banners": promo_banners_payload["items"],
         "promo_entry_banner_id": promo_banners_payload["entry_banner_id"],
         "is_admin": is_admin_user,
+        "user_id": int(resolved_user_id or 0),
+        "platform_user_id": int(platform_user_id or 0),
+        "launch_platform": launch_platform,
     }
 
 
 def _resolve_bootstrap_identity(
     user_id: int | None,
     init_data_raw: str | None,
+    vk_launch_params_raw: str | None = None,
     bot_token: str | None = None,
+    vk_secure_key: str | None = None,
 ) -> tuple[int | None, bool]:
     if isinstance(init_data_raw, str) and init_data_raw:
         trusted_user_id = get_user_id_from_init_data(init_data_raw, bot_token=bot_token)
         return trusted_user_id, is_admin(trusted_user_id)
+    if isinstance(vk_launch_params_raw, str) and vk_launch_params_raw:
+        trusted_user_id = get_user_id_from_vk_launch_params(vk_launch_params_raw, secure_key=vk_secure_key)
+        return trusted_user_id, False
     if user_id is not None and user_id > 0:
         return user_id, False
     return None, False
@@ -3636,6 +3700,7 @@ class MiniAppHandler(BaseHTTPRequestHandler):
 
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
 
     def do_GET(self) -> None:
@@ -3683,13 +3748,24 @@ class MiniAppHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/bootstrap":
             query = parse_qs(parsed.query)
             query_user_id = int((query.get("user_id") or ["0"])[0] or "0")
+            query_vk_launch_params = str((query.get("vk_launch_params") or [""])[0] or "").strip()
+            if not query_vk_launch_params and "sign" in query and any(key.startswith("vk_") for key in query):
+                query_vk_launch_params = parsed.query
             try:
                 trusted_user_id, is_admin_user = _resolve_bootstrap_identity(
                     query_user_id if query_user_id > 0 else None,
                     "",
+                    query_vk_launch_params,
                 )
-                payload = self._run(_bootstrap_payload(trusted_user_id, is_admin_user))
+                payload = self._run(_bootstrap_payload(
+                    trusted_user_id,
+                    is_admin_user,
+                    auth_platform="vk" if query_vk_launch_params else "query",
+                    vk_launch_params_raw=query_vk_launch_params,
+                ))
                 self._send_json(payload)
+            except ValueError:
+                self._send_json({"error": "Invalid vk_launch_params"}, status=403)
             except Exception as e:
                 log.exception("bootstrap error")
                 self._send_json({"error": str(e)}, status=500)
@@ -3780,18 +3856,25 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                 self._send_text("ok")
                 return
             if self.path == "/api/bootstrap":
+                vk_launch_params_raw = str(payload.get("vk_launch_params") or "").strip()
+                init_data_raw = str(payload.get("init_data", "") or "")
+                auth_platform = "vk" if vk_launch_params_raw else ("telegram" if init_data_raw else "query")
                 try:
                     trusted_user_id, is_admin_user = _resolve_bootstrap_identity(
                         int(payload.get("user_id") or 0),
-                        payload.get("init_data", ""),
+                        init_data_raw,
+                        vk_launch_params_raw,
                     )
                 except ValueError:
-                    self._send_json({"error": "Invalid init_data"}, status=403)
+                    error_label = "Invalid vk_launch_params" if vk_launch_params_raw else "Invalid init_data"
+                    self._send_json({"error": error_label}, status=403)
                     return
                 result = self._run(_bootstrap_payload(
                     trusted_user_id,
                     is_admin_user,
-                    payload.get("init_data", ""),
+                    init_data_raw,
+                    auth_platform=auth_platform,
+                    vk_launch_params_raw=vk_launch_params_raw,
                 ))
                 self._send_json(result)
                 return

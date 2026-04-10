@@ -28,7 +28,7 @@ async function parseJsonResponse(response) {
   return data
 }
 
-export async function bootstrapWithInitData({ userId = 0, initData = '' } = {}) {
+export async function bootstrapWithInitData({ userId = 0, initData = '', vkLaunchParams = '' } = {}) {
   const response = await fetch('/api/bootstrap', {
     method: 'POST',
     headers: {
@@ -37,6 +37,7 @@ export async function bootstrapWithInitData({ userId = 0, initData = '' } = {}) 
     body: JSON.stringify({
       user_id: userId,
       init_data: initData,
+      vk_launch_params: vkLaunchParams,
     }),
   })
 

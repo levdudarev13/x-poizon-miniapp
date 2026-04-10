@@ -971,6 +971,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     haptic,
     hideKeyboard,
     initData,
+    vkLaunchParams,
     tg,
     isTelegramWebView,
     isTelegramCompatibilityMode,
@@ -1381,7 +1382,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
   const refreshBootstrap = useCallback(async () => {
     try {
-      const data = await bootstrapWithInitData({ userId, initData })
+      const data = await bootstrapWithInitData({ userId, initData, vkLaunchParams })
       if (data?.rate) {
         setRate(data.rate)
         if (data.rate.cny_rub != null) setSearchRate(data.rate.cny_rub)
@@ -1407,7 +1408,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setPromoEntryBannerId(0)
       return null
     }
-  }, [applyAboutDetailsSource, applyPromoBannerSource, applyShowcaseSource, initData, userId])
+  }, [applyAboutDetailsSource, applyPromoBannerSource, applyShowcaseSource, initData, userId, vkLaunchParams])
 
   useEffect(() => {
     if (!active) return

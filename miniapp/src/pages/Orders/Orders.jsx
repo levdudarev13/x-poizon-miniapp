@@ -280,7 +280,7 @@ export default function Orders({
   guidePreview = null,
   guidePreviewSequenceStage = ORDER_GUIDE_SEQUENCE_STAGE.intro,
 }) {
-  const { userId, initData, haptic, tg } = useTelegram()
+  const { userId, initData, vkLaunchParams, haptic, tg } = useTelegram()
   const prefersReducedMotion = useReducedMotion()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -397,14 +397,14 @@ export default function Orders({
     }
 
     try {
-      const payload = await bootstrapWithInitData({ userId, initData })
+      const payload = await bootstrapWithInitData({ userId, initData, vkLaunchParams })
       const nextState = normalizePricingState(payload)
       setPricingState(nextState)
       return nextState
     } catch {
       return null
     }
-  }, [initData, isGuidePreview, previewPricingState, userId])
+  }, [initData, isGuidePreview, previewPricingState, userId, vkLaunchParams])
 
   useEffect(() => {
     if (!active && !isGuidePreview) {

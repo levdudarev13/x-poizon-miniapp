@@ -1,13 +1,20 @@
+from base64 import b64encode
 import hashlib
 import hmac
 import json
 import unittest
 from urllib.parse import urlencode
 
-from auth import get_user_id_from_init_data, get_user_profile_from_init_data
+from auth import (
+    get_user_id_from_init_data,
+    get_user_id_from_vk_launch_params,
+    get_user_profile_from_init_data,
+    get_user_profile_from_vk_launch_params,
+)
 
 
 TEST_BOT_TOKEN = "test-bot-token"
+TEST_VK_SECURE_KEY = "test-vk-secure-key"
 
 
 def build_signed_init_data(
@@ -48,6 +55,31 @@ def build_signed_init_data(
     return urlencode(payload)
 
 
+def build_signed_vk_launch_params(
+    user_id: int,
+    secure_key: str = TEST_VK_SECURE_KEY,
+    *,
+    app_id: int = 6736218,
+    platform: str = "desktop_web",
+) -> str:
+    payload = {
+        "vk_app_id": str(app_id),
+        "vk_are_notifications_enabled": "0",
+        "vk_is_app_user": "1",
+        "vk_language": "ru",
+        "vk_platform": platform,
+        "vk_user_id": str(user_id),
+    }
+    payload["sign"] = b64encode(
+        hmac.new(
+            secure_key.encode(),
+            urlencode(payload, doseq=True).encode(),
+            hashlib.sha256,
+        ).digest()
+    ).decode("utf-8").rstrip("=").replace("+", "-").replace("/", "_")
+    return urlencode(payload)
+
+
 class GetUserIdFromInitDataTests(unittest.TestCase):
     def test_resolves_trusted_user_id_from_signed_init_data(self) -> None:
         raw_init_data = build_signed_init_data(424242)
@@ -76,6 +108,33 @@ class GetUserIdFromInitDataTests(unittest.TestCase):
                 "username": "logistics_buyer",
                 "first_name": "Ivan",
                 "last_name": "Petrov",
+            },
+        )
+
+    def test_resolves_trusted_vk_user_id_from_signed_launch_params(self) -> None:
+        raw_launch_params = build_signed_vk_launch_params(424242)
+
+        self.assertEqual(
+            get_user_id_from_vk_launch_params(raw_launch_params, secure_key=TEST_VK_SECURE_KEY),
+            424242,
+        )
+
+    def test_rejects_vk_launch_params_with_invalid_sign(self) -> None:
+        raw_launch_params = build_signed_vk_launch_params(424242) + "broken"
+
+        with self.assertRaises(ValueError):
+            get_user_id_from_vk_launch_params(raw_launch_params, secure_key=TEST_VK_SECURE_KEY)
+
+    def test_resolves_vk_profile_shape_from_signed_launch_params(self) -> None:
+        raw_launch_params = build_signed_vk_launch_params(777888)
+
+        self.assertEqual(
+            get_user_profile_from_vk_launch_params(raw_launch_params, secure_key=TEST_VK_SECURE_KEY),
+            {
+                "id": 777888,
+                "username": "",
+                "first_name": "",
+                "last_name": "",
             },
         )
 

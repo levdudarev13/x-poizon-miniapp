@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { APP_AUTH_STATE_EVENT, readAppAuthState } from '../utils/appAuthState.js'
+
 function getTelegramWebApp() {
   return window.Telegram?.WebApp ?? null
 }
@@ -30,7 +32,7 @@ function parseUserFromInitData(initData = '') {
   }
 }
 
-function parseLaunchParams() {
+function parseTelegramLaunchParams() {
   const rawHash = window.location.hash.startsWith('#')
     ? window.location.hash.slice(1)
     : window.location.hash
@@ -51,6 +53,27 @@ function parseLaunchParams() {
   }
 }
 
+function parseVkLaunchParams() {
+  try {
+    const rawSearch = window.location.search.startsWith('?')
+      ? window.location.search.slice(1)
+      : window.location.search
+    const params = new URLSearchParams(rawSearch)
+    const hasVkLaunchParams = [...params.keys()].some((key) => key.startsWith('vk_')) || Boolean(params.get('sign'))
+    if (!hasVkLaunchParams) {
+      return { raw: '', userId: 0 }
+    }
+
+    const userId = toFiniteNumber(params.get('vk_user_id'))
+    return {
+      raw: rawSearch,
+      userId: userId > 0 ? userId : 0,
+    }
+  } catch {
+    return { raw: '', userId: 0 }
+  }
+}
+
 function readViewportValue(primaryValue, fallbackValue) {
   const primary = toFiniteNumber(primaryValue)
   if (primary > 0) return primary
@@ -63,7 +86,8 @@ function readViewportValue(primaryValue, fallbackValue) {
 
 function readTelegramContext() {
   const tg = getTelegramWebApp()
-  const launchParams = parseLaunchParams()
+  const launchParams = parseTelegramLaunchParams()
+  const vkLaunchParams = parseVkLaunchParams()
   const initData = tg?.initData || launchParams.initData || ''
   const user = tg?.initDataUnsafe?.user || parseUserFromInitData(initData) || launchParams.user
   const safeAreaInset = normalizeInset(
@@ -81,15 +105,32 @@ function readTelegramContext() {
     tg?.viewportStableHeight ?? tg?.viewport_stable_height,
     viewportHeight,
   )
+  const authState = readAppAuthState()
+  const isTelegramWebView = Boolean(tg || initData || user?.id)
+  const launchPlatform = isTelegramWebView ? 'telegram' : (vkLaunchParams.raw ? 'vk' : 'web')
+  const platformUserId = isTelegramWebView ? toFiniteNumber(user?.id) : vkLaunchParams.userId
+  const appUserId = authState.launchPlatform && authState.launchPlatform !== launchPlatform
+    ? 0
+    : toFiniteNumber(authState.userId)
+  const resolvedUserId = launchPlatform === 'vk'
+    ? appUserId
+    : (platformUserId || appUserId)
 
   return {
     tg,
     initData,
+    vkLaunchParams: vkLaunchParams.raw,
     user,
     safeAreaInset,
     contentSafeAreaInset,
     viewportHeight,
     viewportStableHeight,
+    platformUserId,
+    appUserId,
+    userId: resolvedUserId > 0 ? resolvedUserId : 0,
+    launchPlatform,
+    isTelegramWebView,
+    isTelegramCompatibilityMode: false,
   }
 }
 
@@ -106,9 +147,14 @@ function isSameSnapshot(a, b) {
   return (
     a.tg === b.tg &&
     a.initData === b.initData &&
+    a.vkLaunchParams === b.vkLaunchParams &&
     (a.user?.id || 0) === (b.user?.id || 0) &&
     (a.user?.username || '') === (b.user?.username || '') &&
     (a.user?.photo_url || '') === (b.user?.photo_url || '') &&
+    a.platformUserId === b.platformUserId &&
+    a.appUserId === b.appUserId &&
+    a.userId === b.userId &&
+    a.launchPlatform === b.launchPlatform &&
     isSameInset(a.safeAreaInset, b.safeAreaInset) &&
     isSameInset(a.contentSafeAreaInset, b.contentSafeAreaInset) &&
     a.viewportHeight === b.viewportHeight &&
@@ -153,23 +199,34 @@ export function useTelegram() {
 
     syncContext()
 
-    const intervalId = window.setInterval(() => {
-      syncContext()
-    }, 250)
+    const intervalId = window.setInterval(syncContext, 250)
+    window.addEventListener(APP_AUTH_STATE_EVENT, syncContext)
+    window.addEventListener('hashchange', syncContext)
+    window.addEventListener('popstate', syncContext)
 
     return () => {
       window.clearInterval(intervalId)
+      window.removeEventListener(APP_AUTH_STATE_EVENT, syncContext)
+      window.removeEventListener('hashchange', syncContext)
+      window.removeEventListener('popstate', syncContext)
     }
   }, [])
 
   const {
     tg,
     initData,
+    vkLaunchParams,
     user,
     safeAreaInset,
     contentSafeAreaInset,
     viewportHeight,
     viewportStableHeight,
+    platformUserId,
+    appUserId,
+    userId,
+    launchPlatform,
+    isTelegramWebView,
+    isTelegramCompatibilityMode,
   } = snapshot
 
   const enableVerticalSwipes = () => {
@@ -193,7 +250,13 @@ export function useTelegram() {
   return {
     tg,
     user,
-    userId: user?.id,
+    userId,
+    platformUserId,
+    appUserId,
+    launchPlatform,
+    vkLaunchParams,
+    isTelegramWebView,
+    isTelegramCompatibilityMode,
     firstName: user?.first_name || 'Пользователь',
     lastName: user?.last_name || '',
     username: user?.username || '',
