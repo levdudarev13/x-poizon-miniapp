@@ -37,18 +37,33 @@ export default function App() {
   })
   const [isAdmin, setIsAdmin] = useState(false)
   const [bootstrapPayload, setBootstrapPayload] = useState(null)
-  const [profileRequestedView, setProfileRequestedView] = useState(null)
+  const [profileRequestedView, setProfileRequestedView] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get('tab')
+    const view = params.get('view')
+
+    if (tab === 'profile' && (view === 'delivery' || view === 'faq')) {
+      return view
+    }
+
+    return null
+  })
   const [tabDirection, setTabDirection] = useState(0)
   const [canSwipeShell, setCanSwipeShell] = useState(true)
   const prefersReducedMotion = useReducedMotion()
   const {
     tg,
+    ready,
+    expand,
     haptic,
     userId,
     platformUserId,
     initData,
     vkLaunchParams,
+    vkUserProfile,
     launchPlatform,
+    telegramPlatform,
+    isTelegramCompatibilityMode,
     safeAreaInset,
     contentSafeAreaInset,
     viewportHeight,
@@ -62,6 +77,11 @@ export default function App() {
     width: 0,
   })
   const tabOrder = isAdmin ? [...TAB_ORDER_BASE, 'admin'] : TAB_ORDER_BASE
+  const adminSupportLink = {
+    url: bootstrapPayload?.admin_contact_url,
+    username: bootstrapPayload?.admin_contact_username,
+    userId: bootstrapPayload?.admin_contact_user_id,
+  }
   const tabSwipeRootDatasetKeys = {
     calculator: 'shellSwipeRootCalculator',
     cart: 'shellSwipeRootCart',
@@ -73,10 +93,31 @@ export default function App() {
   useEffect(() => {
     if (!tg) return
 
-    tg.ready?.()
-    tg.expand?.()
+    ready?.()
+    expand?.()
     disableVerticalSwipes?.()
-  }, [disableVerticalSwipes, tg])
+  }, [disableVerticalSwipes, expand, ready, tg])
+
+  useEffect(() => {
+    if (!document.body) return undefined
+
+    if (isTelegramCompatibilityMode) {
+      document.body.dataset.telegramCompat = '1'
+    } else {
+      delete document.body.dataset.telegramCompat
+    }
+
+    if (telegramPlatform) {
+      document.body.dataset.telegramPlatform = telegramPlatform
+    } else {
+      delete document.body.dataset.telegramPlatform
+    }
+
+    return () => {
+      delete document.body.dataset.telegramCompat
+      delete document.body.dataset.telegramPlatform
+    }
+  }, [isTelegramCompatibilityMode, telegramPlatform])
 
   const fetchCartCount = useCallback(async () => {
     if (!userId) return
@@ -111,7 +152,12 @@ export default function App() {
 
     let isMounted = true
 
-    bootstrapWithInitData({ userId: platformUserId, initData, vkLaunchParams })
+    bootstrapWithInitData({
+      userId: platformUserId,
+      initData,
+      vkLaunchParams,
+      vkUserProfile,
+    })
       .then((data) => {
         if (isMounted) {
           setBootstrapPayload(data || null)
@@ -133,7 +179,7 @@ export default function App() {
     return () => {
       isMounted = false
     }
-  }, [initData, launchPlatform, platformUserId, vkLaunchParams])
+  }, [initData, launchPlatform, platformUserId, vkLaunchParams, vkUserProfile])
 
   useEffect(() => {
     if (activeTab === 'admin' && !isAdmin) {
@@ -212,6 +258,7 @@ export default function App() {
       window.removeEventListener(OPEN_FAQ_REQUEST_EVENT, handleOpenFaqRequest)
     }
   }, [activeTab, tabOrder])
+
   const emitSwipeHaptic = useCallback(() => {
     window.requestAnimationFrame(() => {
       haptic?.('light')
@@ -393,11 +440,7 @@ export default function App() {
           requestedView={profileRequestedView}
           onRequestedViewConsumed={handleProfileRequestedViewConsumed}
           onRequestOpenOrderGuide={handleRequestOpenOrderGuide}
-          supportLink={{
-            url: bootstrapPayload?.admin_contact_url,
-            username: bootstrapPayload?.admin_contact_username,
-            userId: bootstrapPayload?.admin_contact_user_id,
-          }}
+          supportLink={adminSupportLink}
         />
       ),
     },
@@ -407,6 +450,7 @@ export default function App() {
         <Orders
           active={activeTab === 'orders'}
           onRequestOpenProfileDelivery={handleRequestOpenProfileDelivery}
+          supportLink={adminSupportLink}
         />
       ),
     },
@@ -419,10 +463,14 @@ export default function App() {
     })
   }
 
+  const renderedPanels = isTelegramCompatibilityMode
+    ? mountedPanels.filter(({ id }) => id === activeTab)
+    : mountedPanels
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="app-shell shell-gesture-root" {...shellSwipeHandlers}>
-        {mountedPanels.map(({ id, content }) => {
+        {renderedPanels.map(({ id, content }) => {
           const isActive = activeTab === id
 
           return (
@@ -432,9 +480,11 @@ export default function App() {
               className={`app-shell__panel ${isActive ? 'app-shell__panel--active' : 'app-shell__panel--inactive'}`}
               style={{
                 pointerEvents: isActive ? 'auto' : 'none',
-                opacity: isActive ? 1 : 0,
-                transform: `translate3d(${isActive ? 0 : inactivePanelOffset}px, 0, 0)`,
-                transition: panelTransition,
+                opacity: isTelegramCompatibilityMode ? 1 : (isActive ? 1 : 0),
+                transform: isTelegramCompatibilityMode
+                  ? 'none'
+                  : `translate3d(${isActive ? 0 : inactivePanelOffset}px, 0, 0)`,
+                transition: isTelegramCompatibilityMode ? 'none' : panelTransition,
               }}
             >
               {content}

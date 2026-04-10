@@ -108,7 +108,7 @@ _TELEGRAM_HTTP_TIMEOUT_SECONDS = 10.0
 
 def _telegram_http_client_kwargs(
     *,
-    timeout: float | httpx.Timeout = _TELEGRAM_HTTP_TIMEOUT_SECONDS,
+    timeout: float = _TELEGRAM_HTTP_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
     client_kwargs: dict[str, object] = {
         "timeout": timeout,
@@ -922,12 +922,46 @@ def _normalize_bootstrap_platform(
     return "query"
 
 
+def _normalize_vk_user_profile(
+    vk_user_profile: dict | None,
+    *,
+    expected_platform_user_id: int | None = None,
+) -> dict[str, str | int]:
+    payload = vk_user_profile if isinstance(vk_user_profile, dict) else {}
+    try:
+        profile_user_id = int(
+            payload.get("id")
+            or payload.get("user_id")
+            or payload.get("vk_user_id")
+            or 0
+        )
+    except (TypeError, ValueError):
+        profile_user_id = 0
+
+    expected_user_id = int(expected_platform_user_id or 0)
+    if expected_user_id > 0 and profile_user_id not in {0, expected_user_id}:
+        return {
+            "id": expected_user_id,
+            "username": "",
+            "first_name": "",
+            "last_name": "",
+        }
+
+    return {
+        "id": expected_user_id or profile_user_id,
+        "username": str(payload.get("username") or "").strip().lstrip("@"),
+        "first_name": str(payload.get("first_name") or "").strip(),
+        "last_name": str(payload.get("last_name") or "").strip(),
+    }
+
+
 async def _resolve_bootstrap_user_context(
     user_id: int | None,
     *,
     auth_platform: str | None = None,
     init_data_raw: str | None = None,
     vk_launch_params_raw: str | None = None,
+    vk_user_profile: dict | None = None,
 ) -> tuple[int | None, int | None, str, dict | None]:
     launch_platform = _normalize_bootstrap_platform(
         auth_platform,
@@ -939,9 +973,16 @@ async def _resolve_bootstrap_user_context(
         return None, None, launch_platform, None
 
     if launch_platform == "vk":
+        normalized_vk_user_profile = _normalize_vk_user_profile(
+            vk_user_profile,
+            expected_platform_user_id=platform_user_id,
+        )
         user = await db.get_or_create_platform_user(
             db.ACCOUNT_PLATFORM_VK,
             str(platform_user_id),
+            str(normalized_vk_user_profile.get("username") or ""),
+            str(normalized_vk_user_profile.get("first_name") or ""),
+            str(normalized_vk_user_profile.get("last_name") or ""),
         )
         return int(user.get("user_id") or 0), platform_user_id, launch_platform, user
 
@@ -970,6 +1011,7 @@ async def _bootstrap_payload(
     *,
     auth_platform: str | None = None,
     vk_launch_params_raw: str | None = None,
+    vk_user_profile: dict | None = None,
 ) -> dict:
     rate = await er.get_rate()
     admin = await db.get_admin_settings()
@@ -986,6 +1028,7 @@ async def _bootstrap_payload(
         auth_platform=auth_platform,
         init_data_raw=init_data_raw,
         vk_launch_params_raw=vk_launch_params_raw,
+        vk_user_profile=vk_user_profile,
     )
     if resolved_user_id:
         await _track_miniapp_activity(resolved_user_id)
@@ -1042,6 +1085,7 @@ def _resolve_bootstrap_identity(
         return trusted_user_id, is_admin(trusted_user_id)
     if isinstance(vk_launch_params_raw, str) and vk_launch_params_raw:
         trusted_user_id = get_user_id_from_vk_launch_params(vk_launch_params_raw, secure_key=vk_secure_key)
+        # VK admin sessions are intentionally disabled until admin auth becomes platform-aware.
         return trusted_user_id, False
     if user_id is not None and user_id > 0:
         return user_id, False
@@ -2076,17 +2120,6 @@ def _admin_order_display_name(item: dict) -> str:
     ).strip()[:80]
 
 
-_SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS = 3
-_SEND_TELEGRAM_MESSAGE_RETRY_DELAYS_SECONDS = (0.75, 1.5)
-_SEND_TELEGRAM_MESSAGE_TIMEOUT = httpx.Timeout(10.0, connect=4.0)
-
-
-def _should_retry_telegram_message_error(exc: Exception) -> bool:
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response is not None and exc.response.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR
-    return isinstance(exc, httpx.TransportError)
-
-
 async def _send_telegram_message(
     user_id: int,
     text: str,
@@ -2104,47 +2137,19 @@ async def _send_telegram_message(
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
 
-    for attempt in range(1, _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS + 1):
-        try:
-            async with httpx.AsyncClient(
-                **_telegram_http_client_kwargs(timeout=_SEND_TELEGRAM_MESSAGE_TIMEOUT)
-            ) as client:
-                response = await client.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                    json=payload,
-                )
-                response.raise_for_status()
-                result = response.json()
-                if not result.get("ok"):
-                    raise RuntimeError(result.get("description") or "sendMessage failed")
-            return True
-        except Exception as exc:
-            should_retry = (
-                attempt < _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS
-                and _should_retry_telegram_message_error(exc)
+    try:
+        async with httpx.AsyncClient(**_telegram_http_client_kwargs()) as client:
+            response = await client.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json=payload,
             )
-            if should_retry:
-                log.warning(
-                    "Telegram send attempt %s/%s failed for user_id=%s: %s",
-                    attempt,
-                    _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS,
-                    user_id,
-                    exc,
-                )
-                retry_delay = _SEND_TELEGRAM_MESSAGE_RETRY_DELAYS_SECONDS[
-                    min(attempt - 1, len(_SEND_TELEGRAM_MESSAGE_RETRY_DELAYS_SECONDS) - 1)
-                ]
-                await asyncio.sleep(retry_delay)
-                continue
-
-            log.warning(
-                "Failed to send Telegram notification to user_id=%s on attempt %s/%s",
-                user_id,
-                attempt,
-                _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS,
-                exc_info=True,
-            )
-            return False
+            response.raise_for_status()
+            result = response.json()
+            if not result.get("ok"):
+                raise RuntimeError(result.get("description") or "sendMessage failed")
+    except Exception:
+        log.warning("Failed to send Telegram notification to user_id=%s", user_id, exc_info=True)
+        return False
 
     return True
 
@@ -2329,30 +2334,6 @@ async def _notify_admin_order_submission(*, user_id: int, order_total_rub: float
                 )
     except Exception:
         log.warning("Failed to notify admins about submitted order for user_id=%s", user_id, exc_info=True)
-
-
-def _dispatch_admin_order_submission_notification(*, user_id: int, order_total_rub: float) -> None:
-    if user_id <= 0:
-        return
-
-    def _runner() -> None:
-        try:
-            asyncio.run(_notify_admin_order_submission(
-                user_id=user_id,
-                order_total_rub=order_total_rub,
-            ))
-        except Exception:
-            log.warning(
-                "Background submitted-order notification crashed for user_id=%s",
-                user_id,
-                exc_info=True,
-            )
-
-    threading.Thread(
-        target=_runner,
-        name=f"submitted-order-notify-{user_id}",
-        daemon=True,
-    ).start()
 
 
 async def _notify_admin_order_action(action: str, item: dict) -> None:
@@ -3275,7 +3256,7 @@ async def _submit_order_payload(payload: dict) -> dict:
     )
     await db.cart_submit_order(user_id)
     if pending_order_items:
-        _dispatch_admin_order_submission_notification(user_id=user_id, order_total_rub=order_total_rub)
+        await _notify_admin_order_submission(user_id=user_id, order_total_rub=order_total_rub)
     return {
         "ok": True,
         "submission_batch_id": submission_batch_id,
@@ -3857,6 +3838,7 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                 return
             if self.path == "/api/bootstrap":
                 vk_launch_params_raw = str(payload.get("vk_launch_params") or "").strip()
+                vk_user_profile = payload.get("vk_user_profile")
                 init_data_raw = str(payload.get("init_data", "") or "")
                 auth_platform = "vk" if vk_launch_params_raw else ("telegram" if init_data_raw else "query")
                 try:
@@ -3875,6 +3857,7 @@ class MiniAppHandler(BaseHTTPRequestHandler):
                     init_data_raw,
                     auth_platform=auth_platform,
                     vk_launch_params_raw=vk_launch_params_raw,
+                    vk_user_profile=vk_user_profile,
                 ))
                 self._send_json(result)
                 return

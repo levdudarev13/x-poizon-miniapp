@@ -98,6 +98,53 @@ const CALCULATOR_STATE_ICONS = {
   IconStateRetry,
   IconStateSuccess,
 }
+const PROMO_ENTRY_SESSION_KEY = 'miniapp.promoEntryShownIds'
+const promoEntryShownIdsMemory = new Set()
+
+function readPromoEntryShownIds() {
+  try {
+    const rawValue = window.sessionStorage.getItem(PROMO_ENTRY_SESSION_KEY)
+    if (!rawValue) return []
+
+    const parsedValue = JSON.parse(rawValue)
+    if (!Array.isArray(parsedValue)) return []
+
+    return parsedValue
+      .map((value) => Number(value) || 0)
+      .filter((value) => value > 0)
+  } catch {
+    return []
+  }
+}
+
+function hasSeenPromoEntryBanner(bannerId) {
+  const normalizedBannerId = Number(bannerId) || 0
+  if (normalizedBannerId <= 0) return false
+
+  if (promoEntryShownIdsMemory.has(normalizedBannerId)) {
+    return true
+  }
+
+  const persistedIds = readPromoEntryShownIds()
+  persistedIds.forEach((value) => promoEntryShownIdsMemory.add(value))
+  return promoEntryShownIdsMemory.has(normalizedBannerId)
+}
+
+function markPromoEntryBannerSeen(bannerId) {
+  const normalizedBannerId = Number(bannerId) || 0
+  if (normalizedBannerId <= 0) return
+
+  promoEntryShownIdsMemory.add(normalizedBannerId)
+
+  try {
+    window.sessionStorage.setItem(
+      PROMO_ENTRY_SESSION_KEY,
+      JSON.stringify(Array.from(promoEntryShownIdsMemory)),
+    )
+  } catch {
+    // Keep the in-memory fallback if storage is unavailable.
+  }
+}
 
 function getCalculatorStateIcon(iconName, size = 24) {
   const Icon = CALCULATOR_STATE_ICONS[iconName]
@@ -972,6 +1019,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
     hideKeyboard,
     initData,
     vkLaunchParams,
+    vkUserProfile,
     tg,
     isTelegramWebView,
     isTelegramCompatibilityMode,
@@ -1054,7 +1102,6 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const [orderGuideCartPreview, setOrderGuideCartPreview] = useState(ORDER_GUIDE_CART_PREVIEW)
   const [orderGuideOrdersPreview, setOrderGuideOrdersPreview] = useState(ORDER_GUIDE_ORDERS_PREVIEW)
   const promoTouchRef = useRef({ x: 0, y: 0, moved: false })
-  const promoEntryShownRef = useRef(false)
   const showcaseFocusTimeoutsRef = useRef([])
   const showcaseEditorInputRef = useRef(null)
   const parseProductRequestIdRef = useRef(0)
@@ -1382,7 +1429,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
 
   const refreshBootstrap = useCallback(async () => {
     try {
-      const data = await bootstrapWithInitData({ userId, initData, vkLaunchParams })
+      const data = await bootstrapWithInitData({ userId, initData, vkLaunchParams, vkUserProfile })
       if (data?.rate) {
         setRate(data.rate)
         if (data.rate.cny_rub != null) setSearchRate(data.rate.cny_rub)
@@ -1408,7 +1455,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       setPromoEntryBannerId(0)
       return null
     }
-  }, [applyAboutDetailsSource, applyPromoBannerSource, applyShowcaseSource, initData, userId, vkLaunchParams])
+  }, [applyAboutDetailsSource, applyPromoBannerSource, applyShowcaseSource, initData, userId, vkLaunchParams, vkUserProfile])
 
   useEffect(() => {
     if (!active) return
@@ -1416,7 +1463,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   }, [active, refreshBootstrap])
 
   useEffect(() => {
-    if (!active || step !== 'idle' || promoModalBannerId || promoEntryShownRef.current) {
+    if (!active || step !== 'idle' || promoModalBannerId) {
       return undefined
     }
 
@@ -1425,7 +1472,11 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       return undefined
     }
 
-    promoEntryShownRef.current = true
+    if (hasSeenPromoEntryBanner(entryBanner.id)) {
+      return undefined
+    }
+
+    markPromoEntryBannerSeen(entryBanner.id)
     setPromoModalBannerId(entryBanner.id)
     return undefined
   }, [active, promoBanners, promoEntryBannerId, promoModalBannerId, step])
@@ -1861,7 +1912,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
   const shouldShowSearchHint = !searchInputText && !searchInputFocused
   const showAnimatedSearchHint = shouldShowSearchHint && !prefersReducedMotion
   const showStaticSearchHint = shouldShowSearchHint && !showAnimatedSearchHint
-  const allowAnimatedIntro = active && !prefersReducedMotion && !isTelegramWebView
+  const allowAnimatedIntro = active && !prefersReducedMotion
 
   useEffect(() => {
     const baselineSelection = String(pricingSourceProduct?.size || '').trim()
@@ -2443,7 +2494,7 @@ const Calculator = forwardRef(function Calculator({ onCartChange, active = false
       }
 
       const maxScrollTop = Math.max(0, scrollNode.scrollHeight - scrollNode.clientHeight)
-      const targetScrollTop = maxScrollTop * 0.4
+      const targetScrollTop = maxScrollTop * 0.3
       scrollNode.scrollTop = 0
 
       if (targetScrollTop <= 0) {

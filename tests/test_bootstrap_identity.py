@@ -1,5 +1,6 @@
 import asyncio
 from base64 import b64encode
+from contextlib import ExitStack
 import hashlib
 import hmac
 import json
@@ -79,14 +80,33 @@ def build_signed_vk_launch_params(
     return urlencode(payload)
 
 
-def patch_bootstrap_content_payloads():
-    return patch.multiple(
-        "miniapp_server",
-        _showcase_payload=AsyncMock(return_value={"items": [], "configured_count": 0}),
-        _about_details_payload=AsyncMock(return_value={"items": []}),
-        _promo_banners_payload=AsyncMock(return_value={"items": [], "entry_banner_id": 0}),
-        _track_miniapp_activity=AsyncMock(),
+def patch_bootstrap_content_payloads() -> ExitStack:
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "miniapp_server._showcase_payload",
+            new=AsyncMock(return_value={"items": [], "configured_count": 0}),
+        )
     )
+    stack.enter_context(
+        patch(
+            "miniapp_server._about_details_payload",
+            new=AsyncMock(return_value={"items": []}),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "miniapp_server._promo_banners_payload",
+            new=AsyncMock(return_value={"items": [], "entry_banner_id": 0}),
+        )
+    )
+    stack.enter_context(
+        patch(
+            "miniapp_server._track_miniapp_activity",
+            new=AsyncMock(return_value=None),
+        )
+    )
+    return stack
 
 
 class BootstrapIdentityTests(unittest.TestCase):
@@ -151,7 +171,8 @@ class BootstrapIdentityTests(unittest.TestCase):
                     "margin_min_rub": "500.0",
                 }
             ),
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             payload = asyncio.run(_bootstrap_payload(321, is_admin_user=True))
 
         self.assertIs(payload["is_admin"], True)
@@ -192,7 +213,8 @@ class BootstrapIdentityTests(unittest.TestCase):
                 "first_name": "Ivan",
                 "last_name": "Petrov",
             },
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             asyncio.run(
                 _bootstrap_payload(
                     404,
@@ -234,7 +256,8 @@ class BootstrapIdentityTests(unittest.TestCase):
         ), patch(
             "miniapp_server.db.get_or_create_platform_user",
             new=get_or_create_platform_user,
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             payload = asyncio.run(
                 _bootstrap_payload(
                     585780201,
@@ -243,10 +266,67 @@ class BootstrapIdentityTests(unittest.TestCase):
                 )
             )
 
-        get_or_create_platform_user.assert_awaited_once_with("vk", "585780201")
+        get_or_create_platform_user.assert_awaited_once_with(
+            "vk",
+            "585780201",
+            "",
+            "",
+            "",
+        )
         self.assertEqual(payload["user_id"], 7806888522)
         self.assertEqual(payload["platform_user_id"], 585780201)
         self.assertEqual(payload["launch_platform"], "vk")
+
+    def test_bootstrap_payload_persists_vk_profile_identity_fields(self) -> None:
+        rate = SimpleNamespace(
+            cny_rub=11.1,
+            usd_rub=12.2,
+            eur_rub=13.3,
+            updated_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
+            age_seconds=5,
+            age_human="5s",
+        )
+        get_or_create_platform_user = AsyncMock(
+            return_value={
+                "user_id": 7806888522,
+                "margin_steps": "[]",
+                "margin_min_rub": "500.0",
+                "first_name": "Lev",
+                "last_name": "Dumaet",
+            }
+        )
+
+        with patch(
+            "miniapp_server.er.get_rate",
+            new=AsyncMock(return_value=rate),
+        ), patch(
+            "miniapp_server.db.get_admin_settings",
+            new=AsyncMock(return_value={"commission_pct": "10.0"}),
+        ), patch(
+            "miniapp_server.db.get_or_create_platform_user",
+            new=get_or_create_platform_user,
+        ), patch_bootstrap_content_payloads(
+        ):
+            asyncio.run(
+                _bootstrap_payload(
+                    585780201,
+                    is_admin_user=False,
+                    auth_platform="vk",
+                    vk_user_profile={
+                        "id": 585780201,
+                        "first_name": "Lev",
+                        "last_name": "Dumaet",
+                    },
+                )
+            )
+
+        get_or_create_platform_user.assert_awaited_once_with(
+            "vk",
+            "585780201",
+            "",
+            "Lev",
+            "Dumaet",
+        )
 
     def test_bootstrap_payload_includes_admin_contact_url(self) -> None:
         rate = SimpleNamespace(
@@ -287,7 +367,8 @@ class BootstrapIdentityTests(unittest.TestCase):
         ), patch(
             "miniapp_server.ADMIN_CONTACT_USERNAME",
             "",
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             payload = asyncio.run(_bootstrap_payload(321, is_admin_user=False))
 
         self.assertEqual(payload["admin_contact_url"], "https://t.me/china_bayer2")
@@ -333,7 +414,8 @@ class BootstrapIdentityTests(unittest.TestCase):
         ), patch(
             "miniapp_server.ADMIN_CONTACT_USERNAME",
             "",
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             payload = asyncio.run(_bootstrap_payload(321, is_admin_user=False))
 
         self.assertEqual(payload["admin_contact_url"], "tg://user?id=1012099394")
@@ -379,7 +461,8 @@ class BootstrapIdentityTests(unittest.TestCase):
         ), patch(
             "miniapp_server.ADMIN_CONTACT_USERNAME",
             "sofa_onli",
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             payload = asyncio.run(_bootstrap_payload(321, is_admin_user=False))
 
         self.assertEqual(payload["admin_contact_url"], "https://t.me/sofa_onli")
@@ -422,7 +505,8 @@ class BootstrapIdentityTests(unittest.TestCase):
         ), patch(
             "miniapp_server.time.time",
             return_value=1_500.0,
-        ), patch_bootstrap_content_payloads():
+        ), patch_bootstrap_content_payloads(
+        ):
             payload = asyncio.run(_bootstrap_payload(321, is_admin_user=False))
 
         self.assertEqual(payload["rate"]["cny_rub"], 13.0)
