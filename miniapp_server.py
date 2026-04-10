@@ -41,6 +41,13 @@ from config import (
     DEFAULT_MARGIN_STEPS,
     DELIVERY_DISPLAY,
     MINI_APP_PORT,
+    MINI_APP_PUBLIC_URL,
+    PROXY,
+    VK_CALLBACK_CONFIRMATION_CODE,
+    VK_CALLBACK_SECRET,
+    VK_GROUP_ID,
+    VK_GROUP_TOKEN,
+    VK_MINI_APP_URL,
 )
 from models import ProductDraft, UserSettings
 from services import exchange_rate as er
@@ -91,6 +98,20 @@ _ABOUT_DETAILS_IMAGE_FORMAT = "2:3"
 _PUBLIC_UPLOAD_BASE_URL = str(
     os.getenv("MINI_APP_API_PUBLIC_URL", "").strip() or "https://api.x-poizon.ru"
 ).rstrip("/")
+_TELEGRAM_HTTP_TIMEOUT_SECONDS = 10.0
+
+
+def _telegram_http_client_kwargs(
+    *,
+    timeout: float | httpx.Timeout = _TELEGRAM_HTTP_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    client_kwargs: dict[str, object] = {
+        "timeout": timeout,
+        "follow_redirects": True,
+    }
+    if PROXY:
+        client_kwargs["proxy"] = PROXY
+    return client_kwargs
 
 
 def _resolve_static_file_path(request_path: str) -> Path:
@@ -276,6 +297,23 @@ def _resolve_upload_path(request_path: str) -> Path | None:
 
 def _public_media_url(value: object) -> str:
     normalized_url = str(value or "").strip()
+    if not normalized_url:
+        return ""
+
+    parsed_url = urlparse(normalized_url)
+    if parsed_url.scheme and parsed_url.netloc:
+        if not parsed_url.path.startswith("/uploads/"):
+            return normalized_url
+        if not _PUBLIC_UPLOAD_BASE_URL:
+            return normalized_url
+
+        suffix = parsed_url.path
+        if parsed_url.query:
+            suffix = f"{suffix}?{parsed_url.query}"
+        if parsed_url.fragment:
+            suffix = f"{suffix}#{parsed_url.fragment}"
+        return f"{_PUBLIC_UPLOAD_BASE_URL}{suffix}"
+
     if not normalized_url.startswith("/uploads/"):
         return normalized_url
     if not _PUBLIC_UPLOAD_BASE_URL:
@@ -1692,7 +1730,7 @@ async def _resolve_admin_user_identities(rows: list[dict]) -> dict[int, dict[str
             identities[user_id] = _build_rich_admin_user_identity(user_id)
         return identities
 
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(**_telegram_http_client_kwargs()) as client:
         resolved_profiles = await asyncio.gather(
             *(
                 _fetch_telegram_user_identity(user_id, client)
@@ -2004,7 +2042,9 @@ async def _send_telegram_message(
 
     for attempt in range(1, _SEND_TELEGRAM_MESSAGE_MAX_ATTEMPTS + 1):
         try:
-            async with httpx.AsyncClient(timeout=_SEND_TELEGRAM_MESSAGE_TIMEOUT, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                **_telegram_http_client_kwargs(timeout=_SEND_TELEGRAM_MESSAGE_TIMEOUT)
+            ) as client:
                 response = await client.post(
                     f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                     json=payload,
@@ -2042,7 +2082,121 @@ async def _send_telegram_message(
             )
             return False
 
-    return False
+    return True
+
+
+def _configured_vk_mini_app_url() -> str:
+    return str(VK_MINI_APP_URL or "").strip() or str(MINI_APP_PUBLIC_URL or "").strip()
+
+
+def _vk_event_group_matches(payload: dict | None) -> bool:
+    if VK_GROUP_ID <= 0:
+        return True
+    if not isinstance(payload, dict):
+        return False
+    try:
+        event_group_id = int(payload.get("group_id") or 0)
+    except (TypeError, ValueError):
+        return False
+    return event_group_id == VK_GROUP_ID
+
+
+def _vk_event_secret_matches(payload: dict | None) -> bool:
+    if not VK_CALLBACK_SECRET:
+        return True
+    if not isinstance(payload, dict):
+        return False
+    received_secret = str(payload.get("secret") or "")
+    return bool(received_secret) and secrets.compare_digest(received_secret, VK_CALLBACK_SECRET)
+
+
+def _extract_vk_callback_message(payload: dict | None) -> dict | None:
+    if not isinstance(payload, dict):
+        return None
+
+    object_payload = payload.get("object")
+    if not isinstance(object_payload, dict):
+        return None
+
+    message_payload = object_payload.get("message")
+    if isinstance(message_payload, dict):
+        return message_payload
+
+    if "peer_id" in object_payload or "from_id" in object_payload:
+        return object_payload
+
+    return None
+
+
+def _is_vk_private_peer(peer_id: int) -> bool:
+    return 0 < peer_id < 2_000_000_000
+
+
+def _build_vk_welcome_text() -> str:
+    mini_app_url = _configured_vk_mini_app_url()
+    message_lines = [
+        "Бот VK подключен.",
+        "Основной функционал из Telegram переношу аккуратно, без ломки текущего бота.",
+    ]
+    if mini_app_url:
+        message_lines.append(f"Пока можно открыть приложение по ссылке: {mini_app_url}")
+    return "\n\n".join(message_lines)
+
+
+async def _send_vkontakte_message(
+    peer_id: int,
+    text: str,
+) -> bool:
+    if peer_id <= 0 or not VK_GROUP_TOKEN or not text:
+        return False
+
+    payload = {
+        "access_token": VK_GROUP_TOKEN,
+        "v": "5.199",
+        "peer_id": peer_id,
+        "random_id": secrets.randbelow(2_147_483_647),
+        "message": text,
+        "disable_mentions": 1,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            response = await client.post(
+                "https://api.vk.com/method/messages.send",
+                data=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+            if result.get("error"):
+                error_payload = result.get("error") or {}
+                raise RuntimeError(str(error_payload.get("error_msg") or "messages.send failed"))
+    except Exception:
+        log.warning("Failed to send VK notification to peer_id=%s", peer_id, exc_info=True)
+        return False
+
+    return True
+
+
+async def _handle_vk_message_new(payload: dict | None) -> None:
+    message_payload = _extract_vk_callback_message(payload)
+    if not message_payload:
+        return
+
+    try:
+        from_id = int(message_payload.get("from_id") or 0)
+        peer_id = int(message_payload.get("peer_id") or 0)
+    except (TypeError, ValueError):
+        return
+
+    if from_id <= 0 or not _is_vk_private_peer(peer_id):
+        return
+
+    try:
+        await db.get_or_create_platform_user(db.ACCOUNT_PLATFORM_VK, str(from_id))
+    except Exception:
+        log.warning("Failed to sync VK user_id=%s into shared DB", from_id, exc_info=True)
+
+    await _send_vkontakte_message(peer_id, _build_vk_welcome_text())
 
 
 def _format_admin_order_total_rub(amount_rub: float) -> str:
@@ -2574,7 +2728,7 @@ async def _admin_avatar_bytes(user_id: int) -> tuple[str, bytes] | None:
         return None
 
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(**_telegram_http_client_kwargs()) as client:
             photos_response = await client.get(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/getUserProfilePhotos",
                 params={"user_id": user_id, "limit": 1},
@@ -3425,6 +3579,14 @@ class MiniAppHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_text(self, body: str, status: int = 200) -> None:
+        self._send_bytes(
+            str(body or "").encode("utf-8"),
+            content_type="text/plain; charset=utf-8",
+            status=status,
+            cache_control="no-store",
+        )
+
     def _json_body(self) -> dict:
         length = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(length) if length else b"{}"
@@ -3591,6 +3753,27 @@ class MiniAppHandler(BaseHTTPRequestHandler):
             return
 
         try:
+            if self.path == "/api/vk/callback":
+                if not _vk_event_group_matches(payload):
+                    self._send_text("invalid group", status=403)
+                    return
+                if not _vk_event_secret_matches(payload):
+                    self._send_text("invalid secret", status=403)
+                    return
+
+                event_type = str(payload.get("type") or "").strip().lower()
+                if event_type == "confirmation":
+                    if not VK_CALLBACK_CONFIRMATION_CODE:
+                        self._send_text("confirmation code is not configured", status=503)
+                        return
+                    self._send_text(VK_CALLBACK_CONFIRMATION_CODE)
+                    return
+
+                if event_type == "message_new":
+                    self._run(_handle_vk_message_new(payload))
+
+                self._send_text("ok")
+                return
             if self.path == "/api/bootstrap":
                 try:
                     trusted_user_id, is_admin_user = _resolve_bootstrap_identity(

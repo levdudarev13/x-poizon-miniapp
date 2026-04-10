@@ -25,6 +25,8 @@ ORDER_GUIDE_STEP_SIX_PREVIEW_SETTING_KEY = "order_guide_step_six_preview"
 ORDER_GUIDE_STEP_EIGHT_PREVIEW_SETTING_KEY = "order_guide_step_eight_preview"
 ORDER_GUIDE_STEP_SIX_SELECTED_ITEM_ID = "order-guide-step-six-item-3"
 ORDER_GUIDE_STEP_EIGHT_ITEM_ID = "order-guide-step-eight-item-1"
+ACCOUNT_PLATFORM_TELEGRAM = "telegram"
+ACCOUNT_PLATFORM_VK = "vk"
 
 
 def _build_order_guide_step_six_preview_item(
@@ -813,6 +815,17 @@ async def init_db():
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS platform_accounts (
+                platform TEXT NOT NULL,
+                platform_user_id TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (platform, platform_user_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_platform_accounts_user_id
+            ON platform_accounts (user_id);
+
             CREATE TABLE IF NOT EXISTS calculations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id     INTEGER NOT NULL,
@@ -932,6 +945,15 @@ async def init_db():
                 for key, value in DEFAULT_ADMIN_SETTINGS.items()
             ],
         )
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO platform_accounts (platform, platform_user_id, user_id)
+            SELECT ?, CAST(user_id AS TEXT), user_id
+            FROM users
+            WHERE user_id > 0
+            """,
+            (ACCOUNT_PLATFORM_TELEGRAM,),
+        )
         # Миграции cart_items
         for col, col_type in [
             ("in_order",       "INTEGER NOT NULL DEFAULT 0"),
@@ -1044,6 +1066,236 @@ def _normalize_user_identity_part(value) -> str:
     return str(value or "").strip()
 
 
+def _normalize_account_platform(platform: str) -> str:
+    normalized_platform = str(platform or "").strip().lower()
+    if not normalized_platform:
+        raise ValueError("platform is required")
+    return normalized_platform
+
+
+def _normalize_platform_user_id(platform_user_id: str | int) -> str:
+    normalized_platform_user_id = str(platform_user_id or "").strip()
+    if not normalized_platform_user_id:
+        raise ValueError("platform_user_id is required")
+    return normalized_platform_user_id
+
+
+def _resolve_legacy_platform_internal_user_id(
+    platform: str,
+    platform_user_id: str,
+) -> int | None:
+    if platform != ACCOUNT_PLATFORM_TELEGRAM:
+        return None
+    try:
+        legacy_user_id = int(platform_user_id)
+    except (TypeError, ValueError):
+        return None
+    return legacy_user_id if legacy_user_id > 0 else None
+
+
+async def _fetch_user_row(
+    db_conn: aiosqlite.Connection,
+    user_id: int,
+) -> dict | None:
+    async with db_conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cur:
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def _fetch_user_by_platform_account(
+    db_conn: aiosqlite.Connection,
+    platform: str,
+    platform_user_id: str,
+) -> dict | None:
+    async with db_conn.execute(
+        """
+        SELECT u.*
+        FROM platform_accounts pa
+        JOIN users u ON u.user_id = pa.user_id
+        WHERE pa.platform = ? AND pa.platform_user_id = ?
+        """,
+        (platform, platform_user_id),
+    ) as cur:
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def _upsert_user_identity_fields(
+    db_conn: aiosqlite.Connection,
+    user: dict,
+    *,
+    username: str,
+    first_name: str,
+    last_name: str,
+) -> dict:
+    next_username = username or str(user.get("username") or "").strip()
+    next_first_name = first_name or str(user.get("first_name") or "").strip()
+    next_last_name = last_name or str(user.get("last_name") or "").strip()
+
+    if (
+        next_username != str(user.get("username") or "").strip()
+        or next_first_name != str(user.get("first_name") or "").strip()
+        or next_last_name != str(user.get("last_name") or "").strip()
+    ):
+        await db_conn.execute(
+            "UPDATE users SET username=?, first_name=?, last_name=? WHERE user_id=?",
+            (next_username, next_first_name, next_last_name, int(user.get("user_id") or 0)),
+        )
+        user["username"] = next_username
+        user["first_name"] = next_first_name
+        user["last_name"] = next_last_name
+
+    return user
+
+
+async def _insert_user_row(
+    db_conn: aiosqlite.Connection,
+    *,
+    user_id: int | None = None,
+    username: str,
+    first_name: str,
+    last_name: str,
+) -> dict:
+    default_steps = json.dumps(DEFAULT_MARGIN_STEPS)
+
+    if user_id is None:
+        cursor = await db_conn.execute(
+            """
+            INSERT INTO users (username, first_name, last_name, margin_steps, margin_min_rub)
+            VALUES (?,?,?,?,?)
+            """,
+            (
+                username,
+                first_name,
+                last_name,
+                default_steps,
+                DEFAULT_MARGIN_MIN_RUB,
+            ),
+        )
+        resolved_user_id = int(cursor.lastrowid or 0)
+    else:
+        await db_conn.execute(
+            """
+            INSERT INTO users (user_id, username, first_name, last_name, margin_steps, margin_min_rub)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (
+                user_id,
+                username,
+                first_name,
+                last_name,
+                default_steps,
+                DEFAULT_MARGIN_MIN_RUB,
+            ),
+        )
+        resolved_user_id = user_id
+
+    return {
+        "user_id": resolved_user_id,
+        "username": username,
+        "first_name": first_name,
+        "last_name": last_name,
+        "margin_steps": default_steps,
+        "margin_min_rub": DEFAULT_MARGIN_MIN_RUB,
+    }
+
+
+async def get_platform_user(
+    platform: str,
+    platform_user_id: str | int,
+) -> dict | None:
+    normalized_platform = _normalize_account_platform(platform)
+    normalized_platform_user_id = _normalize_platform_user_id(platform_user_id)
+
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        return await _fetch_user_by_platform_account(
+            db,
+            normalized_platform,
+            normalized_platform_user_id,
+        )
+
+
+async def get_or_create_platform_user(
+    platform: str,
+    platform_user_id: str | int,
+    username: str = "",
+    first_name: str = "",
+    last_name: str = "",
+) -> dict:
+    normalized_platform = _normalize_account_platform(platform)
+    normalized_platform_user_id = _normalize_platform_user_id(platform_user_id)
+    normalized_username = _normalize_user_identity_part(username).lstrip("@")
+    normalized_first_name = _normalize_user_identity_part(first_name)
+    normalized_last_name = _normalize_user_identity_part(last_name)
+
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        user = await _fetch_user_by_platform_account(
+            db,
+            normalized_platform,
+            normalized_platform_user_id,
+        )
+        if user:
+            user = await _upsert_user_identity_fields(
+                db,
+                user,
+                username=normalized_username,
+                first_name=normalized_first_name,
+                last_name=normalized_last_name,
+            )
+            await db.commit()
+            return user
+
+        legacy_user_id = _resolve_legacy_platform_internal_user_id(
+            normalized_platform,
+            normalized_platform_user_id,
+        )
+        if legacy_user_id is not None:
+            legacy_user = await _fetch_user_row(db, legacy_user_id)
+            if legacy_user:
+                await db.execute(
+                    """
+                    INSERT OR IGNORE INTO platform_accounts (platform, platform_user_id, user_id)
+                    VALUES (?,?,?)
+                    """,
+                    (
+                        normalized_platform,
+                        normalized_platform_user_id,
+                        legacy_user_id,
+                    ),
+                )
+                legacy_user = await _upsert_user_identity_fields(
+                    db,
+                    legacy_user,
+                    username=normalized_username,
+                    first_name=normalized_first_name,
+                    last_name=normalized_last_name,
+                )
+                await db.commit()
+                return legacy_user
+
+        created_user = await _insert_user_row(
+            db,
+            username=normalized_username,
+            first_name=normalized_first_name,
+            last_name=normalized_last_name,
+        )
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO platform_accounts (platform, platform_user_id, user_id)
+            VALUES (?,?,?)
+            """,
+            (
+                normalized_platform,
+                normalized_platform_user_id,
+                int(created_user["user_id"]),
+            ),
+        )
+        await db.commit()
+        return created_user
+
+
 async def get_or_create_user(
     user_id: int,
     username: str = "",
@@ -1056,53 +1308,27 @@ async def get_or_create_user(
 
     async with _connect() as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cur:
-            row = await cur.fetchone()
-        if row:
-            user = dict(row)
-            next_username = normalized_username or str(user.get("username") or "").strip()
-            next_first_name = normalized_first_name or str(user.get("first_name") or "").strip()
-            next_last_name = normalized_last_name or str(user.get("last_name") or "").strip()
-
-            if (
-                next_username != str(user.get("username") or "").strip()
-                or next_first_name != str(user.get("first_name") or "").strip()
-                or next_last_name != str(user.get("last_name") or "").strip()
-            ):
-                await db.execute(
-                    "UPDATE users SET username=?, first_name=?, last_name=? WHERE user_id=?",
-                    (next_username, next_first_name, next_last_name, user_id),
-                )
-                await db.commit()
-                user["username"] = next_username
-                user["first_name"] = next_first_name
-                user["last_name"] = next_last_name
-
+        user = await _fetch_user_row(db, user_id)
+        if user:
+            user = await _upsert_user_identity_fields(
+                db,
+                user,
+                username=normalized_username,
+                first_name=normalized_first_name,
+                last_name=normalized_last_name,
+            )
+            await db.commit()
             return user
-        default_steps = json.dumps(DEFAULT_MARGIN_STEPS)
-        await db.execute(
-            """
-            INSERT INTO users (user_id, username, first_name, last_name, margin_steps, margin_min_rub)
-            VALUES (?,?,?,?,?,?)
-            """,
-            (
-                user_id,
-                normalized_username,
-                normalized_first_name,
-                normalized_last_name,
-                default_steps,
-                DEFAULT_MARGIN_MIN_RUB,
-            ),
+
+        created_user = await _insert_user_row(
+            db,
+            user_id=user_id,
+            username=normalized_username,
+            first_name=normalized_first_name,
+            last_name=normalized_last_name,
         )
         await db.commit()
-        return {
-            "user_id": user_id,
-            "username": normalized_username,
-            "first_name": normalized_first_name,
-            "last_name": normalized_last_name,
-            "margin_steps": default_steps,
-            "margin_min_rub": DEFAULT_MARGIN_MIN_RUB,
-        }
+        return created_user
 
 
 async def update_user_margin(user_id: int, steps: list, min_rub: float):

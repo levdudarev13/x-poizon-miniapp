@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_LOCK_NAME = os.getenv("BOT_LOCK_NAME", "buyer_bot.lock")
+BOT_PROXY = os.getenv("PROXY", "").strip()
 
 if not BOT_TOKEN:
     log.error("BOT_TOKEN не задан в .env")
@@ -57,11 +58,22 @@ async def on_startup(app: Application):
 
 
 def main():
-    request = HTTPXRequest(connect_timeout=30.0, read_timeout=60.0, write_timeout=60.0, media_write_timeout=120.0)
+    request_kwargs = {
+        "connect_timeout": 30.0,
+        "read_timeout": 60.0,
+        "write_timeout": 60.0,
+        "media_write_timeout": 120.0,
+    }
+    if BOT_PROXY:
+        request_kwargs["proxy"] = BOT_PROXY
+
+    request = HTTPXRequest(**request_kwargs)
+    get_updates_request = HTTPXRequest(**request_kwargs)
     app = (
         Application.builder()
         .token(BOT_TOKEN)
         .request(request)
+        .get_updates_request(get_updates_request)
         .post_init(on_startup)
         .build()
     )

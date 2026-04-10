@@ -83,11 +83,45 @@ ADMIN_USER_IDS: tuple[int, ...] = tuple(
 )
 ADMIN_CONTACT_USER_ID: int = int(os.getenv("ADMIN_CONTACT_USER_ID", "0"))
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+VK_GROUP_ID: int = int(os.getenv("VK_GROUP_ID", "0"))
+VK_GROUP_TOKEN: str = os.getenv("VK_GROUP_TOKEN", "").strip()
+VK_CALLBACK_SECRET: str = os.getenv("VK_CALLBACK_SECRET", "").strip()
+VK_CALLBACK_CONFIRMATION_CODE: str = os.getenv("VK_CALLBACK_CONFIRMATION_CODE", "").strip()
 ADMIN_CONTACT_USERNAME: str = os.getenv("ADMIN_CONTACT_USERNAME", "")
 ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "")
 PROXY: str = os.getenv("PROXY", "")
 OZON_PROXY: str = os.getenv("OZON_PROXY", "")
-MINI_APP_URL: str = os.getenv("MINI_APP_URL", "")
+
+
+def resolve_mini_app_public_url() -> str:
+    return os.getenv("MINI_APP_PUBLIC_URL", "").strip()
+
+
+def resolve_mini_app_telegram_url() -> str:
+    return os.getenv("MINI_APP_TELEGRAM_URL", "").strip()
+
+
+def resolve_mini_app_url() -> str:
+    return (
+        resolve_mini_app_telegram_url()
+        or resolve_mini_app_public_url()
+        or os.getenv("MINI_APP_URL", "").strip()
+    )
+
+
+def resolve_vk_mini_app_url() -> str:
+    return (
+        os.getenv("VK_MINI_APP_URL", "").strip()
+        or resolve_mini_app_public_url()
+    )
+
+
+MINI_APP_TELEGRAM_URL: str = resolve_mini_app_telegram_url()
+MINI_APP_PUBLIC_URL: str = resolve_mini_app_public_url()
+MINI_APP_URL: str = resolve_mini_app_url()
+VK_MINI_APP_ID: int = int(os.getenv("VK_MINI_APP_ID", "0"))
+VK_MINI_APP_SECURE_KEY: str = os.getenv("VK_MINI_APP_SECURE_KEY", "").strip()
+VK_MINI_APP_URL: str = resolve_vk_mini_app_url()
 MINI_APP_PORT: int = int(os.getenv("MINI_APP_PORT", "8080"))
 
 
