@@ -6,10 +6,47 @@ import httpx
 
 from miniapp_server import _parse_product, _product_by_spu
 from models import ProductDraft
-from services.parser import _find_variants_from_html, _parse_dewu, parse_poizon_html_specs, parse_url
+from services.parser import _find_variants_from_html, _parse_dewu, parse_poizon_html_specs, parse_url, resolve_url
 
 
 class PoizonHtmlFallbackTests(unittest.TestCase):
+    def test_resolve_url_keeps_original_desktop_dewu_product_url_when_head_drops_ids(self) -> None:
+        original_url = (
+            "https://www.dewu.com/product-detail.html"
+            "?sourceName=h5&spuId=5631050&skuId=628427964&propertyValueId=276554271"
+        )
+        redirected_home = httpx.Response(
+            200,
+            request=httpx.Request("HEAD", "https://www.dewu.com/"),
+        )
+
+        with patch(
+            "services.parser.httpx.AsyncClient.head",
+            new=AsyncMock(return_value=redirected_home),
+        ):
+            resolved = asyncio.run(resolve_url(original_url))
+
+        self.assertEqual(resolved, original_url)
+
+    def test_resolve_url_keeps_resolved_dw4_share_link_when_ids_are_present(self) -> None:
+        original_url = "https://dw4.co/t/A/1ulOJIR8v"
+        resolved_url = (
+            "https://fast.dewu.com/router/product/ProductDetail"
+            "?spuId=15366412&sourceName=shareDetail&skuId=865778286&propertyValueId=505819669"
+        )
+        redirected_product = httpx.Response(
+            200,
+            request=httpx.Request("HEAD", resolved_url),
+        )
+
+        with patch(
+            "services.parser.httpx.AsyncClient.head",
+            new=AsyncMock(return_value=redirected_product),
+        ):
+            resolved = asyncio.run(resolve_url(original_url))
+
+        self.assertEqual(resolved, resolved_url)
+
     def test_find_variants_from_html_reads_sale_properties_list(self) -> None:
         html = """
         "saleProperties":{"list":[

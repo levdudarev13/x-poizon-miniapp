@@ -995,6 +995,28 @@ def _extract_dewu_ids(url: str) -> tuple[str | None, str | None, str | None]:
     return spu_id, sku_id, prop_id
 
 
+def _preserve_poizon_product_url(original_url: str, resolved_url: str) -> str:
+    original = str(original_url or "").strip()
+    resolved = str(resolved_url or "").strip()
+    if not original:
+        return resolved
+    if not resolved:
+        return original
+    if detect_platform(original) != PLATFORM_POIZON:
+        return resolved
+
+    original_ids = _extract_dewu_ids(original)
+    resolved_ids = _extract_dewu_ids(resolved)
+    if any(original_ids) and not any(resolved_ids):
+        log.info(
+            "resolve_url: preserving original poizon url because redirect lost ids original=%s resolved=%s",
+            original,
+            resolved,
+        )
+        return original
+    return resolved
+
+
 def build_dewu_share_url(spu_id: str, sku_id: str | None = None) -> str:
     clean_spu_id = str(spu_id or "").strip()
     clean_sku_id = str(sku_id or "").strip()
@@ -1316,6 +1338,7 @@ async def _parse_1688(client: httpx.AsyncClient, url: str) -> dict:
 
 async def resolve_url(url: str) -> str:
     """Следовать редиректам и вернуть финальный URL (HEAD-запрос)."""
+    original_url = str(url or "").strip()
     for proxy in (PROXY or None, None):
         try:
             async with httpx.AsyncClient(
@@ -1324,11 +1347,11 @@ async def resolve_url(url: str) -> str:
                 headers=HEADERS,
                 proxy=proxy,
             ) as client:
-                head = await client.head(url)
-                return str(head.url)
+                head = await client.head(original_url)
+                return _preserve_poizon_product_url(original_url, str(head.url))
         except Exception:
             continue
-    return url
+    return original_url
 
 
 def needs_poizon_html_fallback(draft: ProductDraft) -> bool:
